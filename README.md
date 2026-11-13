@@ -34,17 +34,31 @@ Dipakai Juragan (Android & iPhone), dibantu staf virtual **SANI**. Sani memanggi
 - **Kirim rekap** sebagai gambar sederhana ke WA.
 - Stok di rumah belum dicatat (menunggu Barang Datang/travel & Shopee).
 
+## Tahap 4 — Barang Datang & stok rumah (sudah)
+- **Jadwal kiriman travel**: tanggal, jam, nama travel, HP sopir (bisa langsung ditelepon), catatan.
+  Bisa **dimasukkan ke kalender HP** (iPhone: file .ics dengan pengingat H-1 & 2 jam sebelumnya; Android: Google Calendar).
+  Sani mengingatkan di halaman awal: hari ini/besok ada kiriman, atau kiriman yang belum dicatat datang.
+- **Barang sudah datang**: isi jumlah per varian → cek ulang → nota **Barang Datang** (nomor MBOKNI yang sama). Jadwal yang cocok otomatis ditandai "sudah datang".
+- **Stok di rumah** = hitungan terakhir + barang datang − titipan. Hitung stok rumah dari Stok & Rekap.
+
+## Tahap 5 — Sinkron Google Sheet (sudah)
+- Lewat Google Apps Script (`apps-script/Code.gs`), panduan pasang di [`apps-script/CARA-PASANG.md`](apps-script/CARA-PASANG.md).
+- Aplikasi tetap offline-first; perubahan dikirim otomatis saat ada sinyal. Nomor nota dijaga unik oleh Sheet.
+- Foto nota disimpan di Google Drive dan bisa dilihat dari HP lain.
+- Sheet berisi tab **Nota**, **Toko**, **Kiriman** yang mudah dibaca.
+- Uji tanpa Google: `node tests/mock-apps-script.mjs 8770`.
+
 ## Rencana
 1. ✅ Titip ke toko + nota
 2. ✅ Cek toko & pembayaran
 3. ✅ Stok & rekap, toko terlaris, saran titip
 4. Pesanan Shopee (dari Google Sheet pencatatan harian)
-5. Jadwal travel & pengingat
-+ Sinkron data antar-HP (rencana: Google Sheet + Google Drive untuk foto)
+5. ✅ Jadwal travel & pengingat
++ ✅ Sinkron data antar-HP (Google Sheet + Google Drive untuk foto)
 
 ## Catatan teknis
 - HTML/CSS/JS biasa, tanpa build. Buka `index.html` lewat server `https://` (mis. GitHub Pages).
-- Data tersimpan di HP masing-masing sampai fitur sinkron dibuat.
+- Data tersimpan di HP (offline-first) dan disinkronkan ke Google Sheet bila tersambung.
 - Uji lokal: `npx http-server -p 8765 .` lalu buka `http://localhost:8765`.
 
 Nota titip dan nota pembayaran memakai satu urutan nomor: `MBOKNI-0001`, `MBOKNI-0002`, …

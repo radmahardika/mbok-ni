@@ -2,6 +2,7 @@ import { saniSVG } from './sani.js';
 import * as D from './data.js';
 import { notaDoc, notaText, waLink, notaImage, tanggal, jam, rupiah, payState } from './nota.js';
 import { PERIODS, period, topStores, rekapImage } from './rekap.js';
+import * as S from './sync.js';
 
 const $app = document.getElementById('app');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -154,9 +155,20 @@ function receiverField(storeId, value, label, draftKey) {
 const drafts = {
   titip: { storeId: null, items: {}, receiver: '' },
   cek: { storeId: null, counted: {}, pulled: {}, receiver: '', pay: null },
+  datang: { items: {}, courier: '', scheduleId: null },
+  rumah: {},
 };
 // Kunci isian stepper -> objek angka yang diubah.
-const qtyTarget = (key) => ({ titip: drafts.titip.items, hitung: drafts.cek.counted, tarik: drafts.cek.pulled })[key];
+const qtyTarget = (key) =>
+  ({ titip: drafts.titip.items, hitung: drafts.cek.counted, tarik: drafts.cek.pulled, datang: drafts.datang.items, rumah: drafts.rumah })[key];
+
+// Jadwal yang kemungkinan sedang datang (3 hari lalu s.d. besok).
+const nearSchedule = () => D.pendingSchedules().find((sc) => D.scheduleDays(sc) >= -3 && D.scheduleDays(sc) <= 1);
+
+function startDatang() {
+  const sc = nearSchedule();
+  drafts.datang = { items: {}, courier: sc?.courier || '', scheduleId: sc?.id || null };
+}
 
 function startTitip(storeId, items = {}) {
   drafts.titip = { storeId, items: { ...items }, receiver: '' };
@@ -182,11 +194,30 @@ const routes = {
   setelan: settings,
   stok: stockPage,
   rekap: rekapPage,
+  datang: datangPage,
+  'datang-jumlah': datangQty,
+  'datang-cek': datangCheck,
+  jadwal: scheduleForm,
+  'hitung-rumah': countHome,
+  sambung: connectPage,
 };
+
+const HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+function whenText(sc) {
+  const d = D.scheduleDays(sc);
+  const day = d === 0 ? 'Hari ini' : d === 1 ? 'Besok' : d === -1 ? 'Kemarin' : tanggal(sc.date + 'T00:00');
+  return `${day}${sc.time ? ` jam ${sc.time.replace(':', '.')}` : ''}`;
+}
 
 // Pengingat untuk beranda, paling penting di atas.
 function reminders() {
   const out = [];
+  for (const sc of D.pendingSchedules()) {
+    const d = D.scheduleDays(sc);
+    const via = sc.courier ? ` lewat <b>${esc(sc.courier)}</b>` : '';
+    if (d < 0) out.push({ icon: '🚐', text: `Kiriman ${whenText(sc).toLowerCase()}${via} belum dicatat datang. Sudah sampai?`, href: '#/datang' });
+    else if (d <= 1) out.push({ icon: '🚐', text: `<b>${whenText(sc)}</b> ada kiriman travel${via}.`, href: '#/datang' });
+  }
   for (const s of D.activeStores()) {
     const old = D.oldItemsAtStore(s.id);
     const lastCek = D.lastNoteForStore(s.id, 'cek');
@@ -200,7 +231,7 @@ function reminders() {
     const s = D.storeById(n.storeId);
     out.push({ icon: '💰', text: `<b>${esc(s?.name)}</b> belum bayar <b>${rupiah(D.owedOf(n))}</b> (${n.no}).`, href: `#/nota?id=${n.id}` });
   }
-  const noPhoto = D.getState().notes.filter((n) => n.status === 'aktif' && !n.photos.length);
+  const noPhoto = D.getState().notes.filter((n) => n.status === 'aktif' && !n.photos.length && n.type !== 'datang');
   if (noPhoto.length) out.push({ icon: '📷', text: `<b>${noPhoto.length} nota</b> belum difoto nota kertasnya.`, href: '#/daftar-nota?foto=belum' });
   return out;
 }
@@ -223,14 +254,28 @@ function home() {
       <nav class="menu">
         <a class="tile primary" href="#/titip"><span class="ico">🏪</span><span>Titip ke Toko</span></a>
         <a class="tile yellow" href="#/cek-toko"><span class="ico">🔍</span><span>Cek Toko &amp; Pembayaran</span></a>
+        <a class="tile" href="#/datang"><span class="ico">🚐</span><span>Barang Datang</span></a>
         <a class="tile" href="#/stok"><span class="ico">📊</span><span>Stok &amp; Rekap</span></a>
-        <button class="tile soon" data-act="soon" data-what="Pesanan Shopee"><span class="ico">🛒</span><span>Pesanan Shopee</span><small>Segera</small></button>
+        <button class="tile soon wide" data-act="soon" data-what="Pesanan Shopee"><span class="ico">🛒</span><span>Pesanan Shopee</span><small>Segera</small></button>
       </nav>
       <div class="row2">
         <a class="btn big" href="#/daftar-nota">📄 Daftar Nota</a>
         <a class="btn big" href="#/setelan">⚙️ Setelan</a>
       </div>
+      ${syncLine()}
     </main>`;
+}
+
+function syncLine() {
+  if (!S.isConfigured()) return '';
+  const sy = D.getState().sync;
+  const n = D.dirtyRecords().length;
+  let t;
+  if (!navigator.onLine || sy.error === 'offline') t = `📴 Belum ada sinyal — ${n} perubahan menunggu dikirim ke Sheet`;
+  else if (sy.error) t = `⚠️ Belum tersimpan ke Sheet: ${esc(sy.error)}`;
+  else if (n) t = `⏳ Mengirim ${n} perubahan ke Sheet…`;
+  else t = `☁️ Tersimpan di Google Sheet${sy.lastAt ? ` · ${jam(sy.lastAt)}` : ''}`;
+  return `<p class="sync-line">${t}</p>`;
 }
 
 // ----- Titip -----
@@ -265,8 +310,10 @@ function titipQty() {
   if (dr.fromCek) msg = `Titip lagi ke <b>${esc(s.name)}</b>. Sani sudah isi sesuai saran — boleh diubah nggih, ${sapa()}.`;
   else if (sug && total(sug.qty)) msg = `Titip ke <b>${esc(s.name)}</b>. Sani punya saran jumlah dari penjualan sebelumnya — ketuk <b>Pakai saran Sani</b> kalau setuju.`;
   else msg = `Titip ke <b>${esc(s.name)}</b>. Berapa bungkus masing-masing, ${sapa()}? Ketuk <b>+</b> untuk menambah.`;
+  const home = D.homeStock();
   const note = (p) => {
     const parts = [];
+    if (home.known) parts.push(`Di rumah: <b>${Math.max(0, home.stock[p.id] || 0)}</b>`);
     if (stock[p.id]) parts.push(`Masih di toko: <b>${stock[p.id]}</b>`);
     if (sug && sug.perWeek[p.id]) parts.push(`laku ±${sug.perWeek[p.id]}/minggu`);
     if (sug) parts.push(`saran Sani: <b>${sug.qty[p.id] || 0}</b>`);
@@ -497,7 +544,7 @@ function notaPreview(n) {
         <div class="nota-no"><b>${d.no}</b><div>${tanggal(d.date, false)}</div></div>
       </div>
       <div class="nota-body">
-        <p class="muted">Toko</p>
+        <p class="muted">${d.storeLabel}</p>
         <h2>${esc(d.store)}</h2>
         ${d.receiver ? `<p class="receiver">${d.receiverLabel}: <b>${esc(d.receiver)}</b></p>` : ''}
         ${sections}
@@ -521,22 +568,24 @@ function notaDetail(params) {
   if (n.status === 'batal') {
     mood = 'khawatir';
     msg = `Nota ${n.no} ini sudah dibatalkan, ${sapa()}.`;
+  } else if (isNew && n.type === 'datang') {
+    msg = `Barang datang sudah Sani catat di <b>${n.no}</b>, ${sapa()}. Stok di rumah bertambah ${D.noteTotalQty(n)} bungkus. Kalau ada surat jalan dari travel, foto nggih.`;
   } else if (isNew) {
     msg = `Nota <b>${n.no}</b> sudah jadi, ${sapa()}! Sekarang kirim ke WA toko, lalu foto nota kertasnya nggih.`;
   } else if (owed) {
     mood = 'ingat';
     msg = `${esc(s?.name)} masih kurang bayar <b>${rupiah(owed)}</b>, ${sapa()}.`;
-  } else if (!n.photos.length) {
+  } else if (!n.photos.length && n.type !== 'datang') {
     mood = 'ingat';
     msg = `Nota kertas untuk <b>${n.no}</b> belum difoto, ${sapa()}.`;
   } else {
-    msg = `Ini nota <b>${n.no}</b> untuk ${esc(s?.name)}.`;
+    msg = `Ini nota <b>${n.no}</b>${n.type === 'datang' ? ' barang datang' : ` untuk ${esc(s?.name)}`}.`;
   }
   const active = n.status === 'aktif';
   const refill = n.type === 'cek' ? { ...n.sold } : null;
   if (refill) for (const [k, v] of Object.entries(n.pulled)) refill[k] = (refill[k] || 0) + v;
   return `
-    ${topbar('Nota', isNew ? '#/' : '#/daftar-nota')}
+    ${topbar('Nota', isNew ? (n.type === 'datang' ? '#/datang' : '#/') : '#/daftar-nota')}
     <main class="page">
       ${sani(mood, msg)}
       ${notaPreview(n)}
@@ -544,9 +593,9 @@ function notaDetail(params) {
         active
           ? `<div class="stack">
         ${owed ? `<button class="btn huge primary" data-act="add-payment" data-id="${n.id}">💰 Catat pembayaran</button>` : ''}
-        <button class="btn huge wa" data-act="send-wa" data-id="${n.id}">💬 Kirim ke WA ${s?.wa ? 'toko' : ''}</button>
+        ${n.type !== 'datang' ? `<button class="btn huge wa" data-act="send-wa" data-id="${n.id}">💬 Kirim ke WA ${s?.wa ? 'toko' : ''}</button>` : ''}
         <button class="btn big" data-act="share-img" data-id="${n.id}">🖼️ Kirim gambar nota</button>
-        <label class="btn big">📷 Foto nota kertas
+        <label class="btn big">📷 ${n.type === 'datang' ? 'Foto surat jalan / nota travel' : 'Foto nota kertas'}
           <input type="file" accept="image/*" capture="environment" data-act="photo" data-id="${n.id}" hidden>
         </label>
         ${refill && total(refill) && isNew ? `<button class="btn big yellow" data-act="refill" data-id="${n.id}">🏪 Titip lagi ke toko ini</button>` : ''}
@@ -566,7 +615,15 @@ async function fillPhotos(n) {
   if (!box || !n.photos.length) return;
   box.innerHTML = `<p class="muted">Foto nota kertas (${n.photos.length})</p>`;
   for (const id of n.photos) {
-    const blob = await D.getPhoto(id);
+    let blob = await D.getPhoto(id);
+    if (!blob) {
+      const ph = document.createElement('div');
+      ph.className = 'photo-wait';
+      ph.textContent = '⏳ Mengambil foto…';
+      box.append(ph);
+      blob = await S.fetchPhoto(n, id).catch(() => null);
+      ph.remove();
+    }
     if (!blob) continue;
     const img = document.createElement('img');
     img.src = URL.createObjectURL(blob);
@@ -578,23 +635,23 @@ async function fillPhotos(n) {
 
 function notaList(params) {
   let notes = D.notesNewestFirst().filter((n) => !params.toko || n.storeId === params.toko);
-  if (params.foto === 'belum') notes = notes.filter((n) => n.status === 'aktif' && !n.photos.length);
+  if (params.foto === 'belum') notes = notes.filter((n) => n.status === 'aktif' && !n.photos.length && n.type !== 'datang');
   const list = notes
     .map((n) => {
       const s = D.storeById(n.storeId);
       const ps = payState(n);
       const qty = n.type === 'cek' ? `laku ${total(n.sold)}` : `${D.noteTotalQty(n)} bks`;
       const badges = [
-        `<i class="b type">${n.type === 'cek' ? '💵 Pembayaran' : '🏪 Titip'}</i>`,
+        `<i class="b type">${{ cek: '💵 Pembayaran', titip: '🏪 Titip', datang: '🚐 Datang' }[n.type]}</i>`,
         n.status === 'batal' ? '<i class="b bad">Batal</i>' : '',
         n.status === 'aktif' && ps ? `<i class="b ${ps.tone}">${ps.text}</i>` : '',
-        n.status === 'aktif' && !n.photos.length ? '<i class="b warn">📷 Belum foto</i>' : '',
+        n.status === 'aktif' && !n.photos.length && n.type !== 'datang' ? '<i class="b warn">📷 Belum foto</i>' : '',
         n.status === 'aktif' && n.photos.length ? '<i class="b ok">📷 Ada foto</i>' : '',
         n.sentAt ? '<i class="b ok">✔ WA</i>' : '',
       ].join('');
       return `<a class="pick note-item ${n.status}" href="#/nota?id=${n.id}">
         <span class="row-sb"><b>${n.no}</b><span>${qty}</span></span>
-        <span>${esc(s?.name)}${n.receiver ? ` · ${esc(n.receiver)}` : ''}</span>
+        <span>${n.type === 'datang' ? `Travel: ${esc(n.courier || '-')}` : esc(s?.name)}${n.receiver ? ` · ${esc(n.receiver)}` : ''}</span>
         <small>${tanggal(n.createdAt)}</small>
         <span class="badges">${badges}</span></a>`;
     })
@@ -653,6 +710,7 @@ function settings() {
   return `
     ${topbar('Setelan')}
     <main class="page">
+      ${sheetSection()}
       <section class="card">
         <h2>Toko titipan</h2>
         <div class="stack">${stores || '<p class="muted">Belum ada toko.</p>'}
@@ -693,6 +751,233 @@ function settings() {
     </main>`;
 }
 
+
+
+// ----- Stok di rumah -----
+function homeCard() {
+  const hs = D.homeStock();
+  if (!hs.known) {
+    return `<section class="card">
+      <h2>🏠 Di rumah</h2>
+      <p>Stok di rumah belum diketahui. Hitung sekali dulu nggih, ${sapa()} — sesudah itu Sani yang menjumlahkan barang datang dan titipan.</p>
+      <a class="btn big yellow" href="#/hitung-rumah">🧮 Hitung stok di rumah</a>
+    </section>`;
+  }
+  const rows = D.PRODUCTS.map((p) => `<li style="--c:${p.color}"><span>${p.short}</span><b>${Math.max(0, hs.stock[p.id] || 0)}</b></li>`).join('');
+  const minus = D.PRODUCTS.some((p) => (hs.stock[p.id] || 0) < 0);
+  const tot = D.PRODUCTS.reduce((a, p) => a + Math.max(0, hs.stock[p.id] || 0), 0);
+  return `<section class="card store-stock">
+    <div class="row-sb"><h2>🏠 Di rumah</h2><b class="big-num">${tot}</b></div>
+    ${minus ? `<p class="b warn">Catatan lebih banyak keluar daripada masuk — sebaiknya hitung ulang</p>` : ''}
+    <ul class="mini">${rows}</ul>
+    <p class="muted small">${hs.lastCount ? `Dihitung terakhir ${tanggal(hs.lastCount, false)}` : 'Belum pernah dihitung'}</p>
+    <a class="btn big" href="#/hitung-rumah">🧮 Hitung ulang stok di rumah</a>
+  </section>`;
+}
+
+function countHome() {
+  return `
+    ${topbar('Hitung Stok Rumah', '#/stok')}
+    <main class="page">
+      ${sani('biasa', `${sapa()}, tolong hitung bumbu yang ada di rumah. Angkanya sudah Sani isi sesuai catatan — kalau beda, ubah nggih.`)}
+      <div class="stack">${D.PRODUCTS.map((p) => stepper(p, drafts.rumah[p.id] || 0, 'rumah', { plus10: true })).join('')}</div>
+      <div class="sticky">
+        <button class="btn huge primary" data-act="save-count">💾 Simpan hitungan</button>
+      </div>
+    </main>`;
+}
+
+// ----- Barang datang -----
+function courierChips(value) {
+  const names = D.recentCouriers();
+  return names.length
+    ? `<div class="chips">${names
+        .map((n) => `<button type="button" class="chip ${n === value ? 'on' : ''}" data-act="pick-courier" data-name="${esc(n)}">${esc(n)}</button>`)
+        .join('')}</div>`
+    : '';
+}
+
+function datangPage() {
+  const pend = D.pendingSchedules();
+  const next = pend[0];
+  let mood = 'biasa';
+  let msg;
+  if (next && D.scheduleDays(next) < 0) {
+    mood = 'ingat';
+    msg = `Kiriman ${whenText(next).toLowerCase()} belum dicatat datang. Sudah sampai, ${sapa()}?`;
+  } else if (next) {
+    msg = `Kiriman berikutnya: <b>${whenText(next)}</b>${next.courier ? ` lewat <b>${esc(next.courier)}</b>` : ''}.`;
+  } else {
+    msg = `Belum ada jadwal kiriman travel, ${sapa()}. Mau Sani catat jadwalnya supaya tidak lupa?`;
+  }
+  const cards = pend
+    .map(
+      (sc) => `<div class="card sched ${D.scheduleDays(sc) < 0 ? 'late' : ''}">
+        <p class="muted">${HARI[new Date(sc.date + 'T00:00').getDay()]}, ${tanggal(sc.date + 'T00:00', false)}</p>
+        <h2>${whenText(sc)}</h2>
+        <p>${sc.courier ? `🚐 <b>${esc(sc.courier)}</b>` : '🚐 Travel'}${sc.note ? `<br>📝 ${esc(sc.note)}` : ''}</p>
+        <div class="stack">
+          ${sc.phone ? `<a class="btn big" href="tel:${esc(sc.phone)}">📞 Telepon ${esc(sc.phone)}</a>` : ''}
+          <button class="btn big" data-act="add-calendar" data-id="${sc.id}">📅 Masukkan ke kalender HP</button>
+          <div class="row2">
+            <a class="btn big" href="#/jadwal?id=${sc.id}">✏️ Ubah</a>
+            <button class="btn big" data-act="cancel-schedule" data-id="${sc.id}">✖ Batal</button>
+          </div>
+        </div>
+      </div>`
+    )
+    .join('');
+  const history = D.notesNewestFirst()
+    .filter((n) => n.type === 'datang')
+    .slice(0, 5)
+    .map(
+      (n) => `<a class="pick note-item ${n.status}" href="#/nota?id=${n.id}">
+        <span class="row-sb"><b>${tanggal(n.createdAt, false)}</b><span>${D.noteTotalQty(n)} bks</span></span>
+        <small>${n.no}${n.courier ? ` · ${esc(n.courier)}` : ''}${n.status === 'batal' ? ' · batal' : ''}</small></a>`
+    )
+    .join('');
+  return `
+    ${topbar('Barang Datang')}
+    <main class="page">
+      ${sani(mood, msg)}
+      <button class="btn huge primary" data-act="start-datang">📦 Barang sudah datang — catat</button>
+      <a class="btn big yellow" href="#/jadwal">🗓️ Jadwalkan kiriman travel</a>
+      ${cards ? `<h2 class="section-h">Jadwal kiriman</h2>${cards}` : ''}
+      ${history ? `<h2 class="section-h">Barang datang terakhir</h2><div class="stack">${history}</div>` : ''}
+    </main>`;
+}
+
+function datangQty() {
+  const dr = drafts.datang;
+  const sc = dr.scheduleId && D.scheduleById(dr.scheduleId);
+  const sum = total(dr.items);
+  const msg = `Berapa bungkus yang datang, ${sapa()}?${sc ? ` Ini untuk kiriman <b>${whenText(sc).toLowerCase()}</b>${sc.courier ? ` (${esc(sc.courier)})` : ''}.` : ''}`;
+  return `
+    ${topbar('Jumlah Datang', '#/datang')}
+    <main class="page">
+      ${sani('biasa', msg)}
+      <div class="stack">${D.PRODUCTS.map((p) => stepper(p, dr.items[p.id] || 0, 'datang', { plus10: true })).join('')}</div>
+      <div class="sticky">
+        <button class="btn huge primary" data-act="go" data-to="#/datang-cek" ${sum ? '' : 'disabled'}>Lanjut (${sum} bungkus) ›</button>
+      </div>
+    </main>`;
+}
+
+function datangCheck() {
+  const dr = drafts.datang;
+  const sum = total(dr.items);
+  if (!sum) return redirect('#/datang');
+  const parts = D.PRODUCTS.filter((p) => dr.items[p.id]).map((p) => `${p.short} ${dr.items[p.id]} bungkus`);
+  return `
+    ${topbar('Cek Ulang', '#/datang-jumlah')}
+    <main class="page">
+      ${sani('biasa', `Sani bacakan nggih, ${sapa()}. Barang datang: ${parts.join(', ')}. Sudah betul?`)}
+      <div class="card">
+        <ul class="sum">${sumList(dr.items)}</ul>
+        <p class="sum-total">Jumlah <b>${sum} bungkus</b></p>
+      </div>
+      <div class="card">
+        <label class="field">Nama travel / sopir (boleh kosong)
+          <input class="input" data-act="courier" value="${esc(dr.courier)}" maxlength="40" placeholder="contoh: Travel Jaya" autocomplete="off">
+        </label>
+        ${courierChips(dr.courier)}
+      </div>
+      <div class="stack">
+        <button class="btn huge primary" data-act="create-datang">✔ Betul, simpan</button>
+        <a class="btn big ghost" href="#/datang-jumlah">✏️ Ubah jumlah</a>
+      </div>
+    </main>`;
+}
+
+function scheduleForm(params) {
+  const sc = params.id ? D.scheduleById(params.id) : null;
+  const tmr = new Date(Date.now() + 864e5);
+  const def = `${tmr.getFullYear()}-${String(tmr.getMonth() + 1).padStart(2, '0')}-${String(tmr.getDate()).padStart(2, '0')}`;
+  return `
+    ${topbar(sc ? 'Ubah Jadwal' : 'Jadwal Kiriman', '#/datang')}
+    <main class="page">
+      ${sani('biasa', `Kapan travel-nya datang, ${sapa()}? Nanti Sani ingatkan di halaman awal, dan bisa dimasukkan ke kalender HP.`)}
+      <form class="stack" data-form="schedule" data-id="${sc?.id || ''}">
+        <label class="field">Tanggal <input class="input" type="date" name="date" required value="${sc?.date || def}"></label>
+        <label class="field">Jam (kira-kira) <input class="input" type="time" name="time" value="${sc?.time || '10:00'}"></label>
+        <div class="card">
+          <label class="field">Nama travel / sopir <input class="input" name="courier" data-act="courier-form" maxlength="40" value="${esc(sc?.courier)}" placeholder="contoh: Travel Jaya" autocomplete="off"></label>
+          ${courierChips(sc?.courier)}
+        </div>
+        <label class="field">No. HP sopir <input class="input" name="phone" inputmode="tel" maxlength="20" value="${esc(sc?.phone)}" placeholder="boleh dikosongkan"></label>
+        <label class="field">Catatan <input class="input" name="note" maxlength="100" value="${esc(sc?.note)}" placeholder="contoh: ambil di pool travel"></label>
+        <button class="btn huge primary" type="submit">💾 Simpan jadwal</button>
+      </form>
+    </main>`;
+}
+
+// Masukkan jadwal ke kalender HP: iPhone pakai file .ics, Android pakai Google Calendar.
+function addToCalendar(sc) {
+  const [y, m, d] = sc.date.split('-').map(Number);
+  const [hh, mm] = (sc.time || '09:00').split(':').map(Number);
+  const start = new Date(y, m - 1, d, hh, mm);
+  const end = new Date(start.getTime() + 3600e3);
+  const f = (t) => `${t.getFullYear()}${String(t.getMonth() + 1).padStart(2, '0')}${String(t.getDate()).padStart(2, '0')}T${String(t.getHours()).padStart(2, '0')}${String(t.getMinutes()).padStart(2, '0')}00`;
+  const title = `Kiriman Mbok Ni datang${sc.courier ? ` (${sc.courier})` : ''}`;
+  const details = [sc.phone ? `HP sopir: ${sc.phone}` : '', sc.note || '', 'Dicatat SANI · Mbok Ni'].filter(Boolean).join('\n');
+  const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (iOS) {
+    const ics = [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Mbok Ni//SANI//ID', 'BEGIN:VEVENT',
+      `UID:${sc.id}@mbokni`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
+      `DTSTART:${f(start)}`, `DTEND:${f(end)}`, `SUMMARY:${title}`, `DESCRIPTION:${details.replace(/\n/g, '\\n')}`,
+      'BEGIN:VALARM', 'TRIGGER:-P1D', 'ACTION:DISPLAY', `DESCRIPTION:Besok: ${title}`, 'END:VALARM',
+      'BEGIN:VALARM', 'TRIGGER:-PT2H', 'ACTION:DISPLAY', `DESCRIPTION:${title}`, 'END:VALARM',
+      'END:VEVENT', 'END:VCALENDAR',
+    ].join('\r\n');
+    download(new Blob([ics], { type: 'text/calendar' }), 'kiriman-mbokni.ics');
+  } else {
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${f(start)}/${f(end)}&details=${encodeURIComponent(details)}`;
+    window.open(url, '_blank');
+  }
+}
+
+// ----- Google Sheet -----
+function sheetSection() {
+  const sy = D.getState().sync;
+  if (!S.isConfigured()) {
+    return `<section class="card">
+      <h2>☁️ Google Sheet</h2>
+      <p class="muted">Supaya catatan di semua HP sama dan tersimpan aman di Google Sheet. Cara memasang ada di panduan <b>CARA-PASANG</b>.</p>
+      <form class="stack" data-form="sync">
+        <label class="field">Alamat Web App (atau tempel link sambung) <input class="input" name="url" required placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
+        <label class="field">Kode rahasia <input class="input" name="token" autocomplete="off" autocapitalize="characters" placeholder="tidak perlu bila menempel link sambung"></label>
+        <button class="btn big primary" type="submit">🔗 Sambungkan</button>
+      </form>
+    </section>`;
+  }
+  return `<section class="card">
+    <h2>☁️ Google Sheet</h2>
+    <p>Tersambung${sy.name ? ` ke <b>${esc(sy.name)}</b>` : ''}.</p>
+    ${syncLine()}
+    <div class="stack">
+      <button class="btn big primary" data-act="sync-now">🔄 Sinkron sekarang</button>
+      <button class="btn big" data-act="share-link">📤 Kirim link sambung ke HP lain</button>
+      <button class="small-danger" data-act="sync-off">Putuskan sambungan</button>
+    </div>
+  </section>`;
+}
+
+function connectLink() {
+  const { url, token } = D.getState().sync;
+  return `${location.origin}${location.pathname}#/sambung?u=${encodeURIComponent(url)}&k=${encodeURIComponent(token)}`;
+}
+
+function connectPage(params) {
+  if (!params.u || !params.k) return redirect('#/');
+  return `
+    ${topbar('Sambungkan')}
+    <main class="page">
+      ${sani('biasa', `${sapa()}, sambungkan HP ini ke Google Sheet Mbok Ni? Sesudah tersambung, catatan di semua HP jadi sama.`)}
+      <button class="btn huge primary" data-act="connect-link" data-u="${esc(params.u)}" data-k="${esc(params.k)}">✔ Ya, sambungkan</button>
+      <a class="btn big ghost" href="#/">Nanti saja</a>
+    </main>`;
+}
 
 // ----- Stok & rekap -----
 function tabs(active) {
@@ -742,9 +1027,10 @@ function stockPage() {
     <main class="page">
       ${tabs('stok')}
       ${sani('biasa', msg)}
+      ${homeCard()}
       ${stores.length ? `<section class="card"><h2>Di semua toko</h2>${bars(D.PRODUCTS.map((p) => ({ label: p.short, dot: p.color, value: all[p.id] || 0 })))}</section>` : ''}
       ${cards}
-      <p class="muted small">Stok di rumah akan tercatat nanti bersama fitur <b>Barang Datang</b> (travel) dan pesanan Shopee.</p>
+      <p class="muted small">Pesanan Shopee belum mengurangi stok di rumah (menunggu fitur Shopee).</p>
     </main>`;
 }
 
@@ -793,7 +1079,8 @@ function rekapPage(params) {
       </div>
       ${r.salesUnknown ? `<p class="muted small">${r.salesUnknown} bungkus laku belum dihitung uangnya karena harga titip belum diisi di Setelan.</p>` : ''}
       <section class="card"><h2>Laku per produk</h2>${bars(D.PRODUCTS.map((p) => ({ label: p.short, dot: p.color, value: r.sold[p.id] || 0 })))}
-        ${pulled ? `<p class="muted">Ditarik: <b>${pulled} bungkus</b></p>` : ''}</section>
+        ${pulled ? `<p class="muted">Ditarik: <b>${pulled} bungkus</b></p>` : ''}
+        ${total(r.datang) ? `<p class="muted">Barang datang dari travel: <b>${total(r.datang)} bungkus</b></p>` : ''}</section>
       ${stores.length ? `<section class="card"><h2>Toko terlaris</h2>${bars(stores.map((x, i) => ({ label: `${i + 1}. ${esc(x.name)}`, value: x.qty })))}</section>` : ''}
       ${suggest ? `<section class="card"><h2>Saran titip dari Sani</h2><div class="stack">${suggest}</div></section>` : ''}
       <button class="btn huge wa" data-act="share-rekap" data-p="${pid}">🖼️ Kirim rekap (gambar)</button>
@@ -814,6 +1101,10 @@ function redirect(hash) {
 function render() {
   const { path, params } = parse();
   const view = routes[path] || home;
+  if (path === 'hitung-rumah' && render.last !== location.hash) {
+    const hs = D.homeStock().stock;
+    drafts.rumah = Object.fromEntries(D.PRODUCTS.map((p) => [p.id, Math.max(0, hs[p.id] || 0)]));
+  }
   document.querySelectorAll('.toast').forEach((x) => x.remove());
   const y = window.scrollY;
   const same = render.last === location.hash;
@@ -857,9 +1148,11 @@ $app.addEventListener('click', async (e) => {
   } else if (act === 'soon') {
     await confirmBox({ mood: 'ingat', text: `${el.dataset.what} masih Sani siapkan nggih, ${sapa()}. Sabar sebentar.`, yes: 'Nggih', no: null });
   } else if (act === 'pick-store') {
+    S.syncNow();
     if (drafts.titip.storeId !== id) startTitip(id);
     location.hash = '#/jumlah';
   } else if (act === 'pick-cek') {
+    S.syncNow();
     startCek(id);
     location.hash = '#/cek-hitung';
   } else if (act === 'show-all') {
@@ -979,6 +1272,66 @@ $app.addEventListener('click', async (e) => {
   } else if (act === 'toggle-voice') {
     D.setSetting('voice', !D.getState().settings.voice);
     render();
+  } else if (act === 'start-datang') {
+    S.syncNow();
+    startDatang();
+    location.hash = '#/datang-jumlah';
+  } else if (act === 'pick-courier') {
+    const input = document.querySelector('[data-act="courier"], [data-act="courier-form"]');
+    if (input) input.value = el.dataset.name;
+    drafts.datang.courier = el.dataset.name;
+    document.querySelectorAll('.chip[data-act="pick-courier"]').forEach((c) => c.classList.toggle('on', c === el));
+  } else if (act === 'create-datang') {
+    const dr = drafts.datang;
+    const items = Object.fromEntries(Object.entries(dr.items).filter(([, q]) => q > 0));
+    const n = D.createDatangNote(items, dr.courier, dr.scheduleId);
+    drafts.datang = { items: {}, courier: '', scheduleId: null };
+    location.replace(`#/nota?id=${n.id}&baru=1`);
+  } else if (act === 'add-calendar') {
+    addToCalendar(D.scheduleById(id));
+  } else if (act === 'cancel-schedule') {
+    const sc = D.scheduleById(id);
+    if (await confirmBox({ text: `Batalkan jadwal kiriman <b>${whenText(sc).toLowerCase()}</b>?`, yes: 'Ya, batalkan', no: 'Jangan', danger: true })) {
+      D.cancelSchedule(id);
+      render();
+    }
+  } else if (act === 'save-count') {
+    const ok = await confirmBox({ mood: 'biasa', text: `Simpan hitungan stok di rumah: ${D.PRODUCTS.map((p) => `${p.short} ${drafts.rumah[p.id] || 0}`).join(', ')}?`, yes: 'Ya, simpan', no: 'Belum' });
+    if (ok) {
+      D.saveCount(drafts.rumah);
+      toast('Stok rumah disimpan ✔');
+      location.hash = '#/stok';
+    }
+  } else if (act === 'sync-now') {
+    toast('Sinkron…');
+    const r = await S.syncNow();
+    toast(r.ok ? 'Sudah sama dengan Sheet ✔' : r.offline ? 'Belum ada sinyal' : `Gagal: ${r.error}`);
+    render();
+  } else if (act === 'share-link') {
+    const link = connectLink();
+    const text = `Buka link ini di HP Juragan supaya SANI tersambung ke Google Sheet Mbok Ni:\n${link}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ text });
+      } catch {
+        /* dibatalkan */
+      }
+    } else window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  } else if (act === 'sync-off') {
+    if (await confirmBox({ text: 'Putuskan sambungan ke Google Sheet? Data di HP ini tetap ada.', yes: 'Ya, putuskan', no: 'Jangan', danger: true })) {
+      D.setSync({ url: '', token: '', since: 0, error: '', name: '' });
+      render();
+    }
+  } else if (act === 'connect-link') {
+    toast('Menyambungkan…');
+    const r = await S.testConnection(el.dataset.u, el.dataset.k);
+    if (!r.ok) {
+      await confirmBox({ text: `Maaf, belum bisa tersambung: ${esc(r.error)}.`, yes: 'Nggih', no: null });
+      return;
+    }
+    await S.syncNow();
+    toast('Tersambung ke Google Sheet ✔');
+    location.replace('#/');
   } else if (act === 'use-suggest') {
     drafts.titip.items = { ...D.suggestion(drafts.titip.storeId).qty };
     render();
@@ -1007,6 +1360,7 @@ $app.addEventListener('click', async (e) => {
 // Ketik nama penerima: simpan ke draf tanpa menggambar ulang (supaya keyboard tidak tertutup).
 $app.addEventListener('input', (e) => {
   const el = e.target;
+  if (el.dataset.act === 'courier') drafts.datang.courier = el.value;
   if (el.dataset.act === 'receiver') {
     drafts[el.dataset.draft].receiver = el.value;
     el.closest('.card')?.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c.dataset.name === el.value));
@@ -1041,8 +1395,45 @@ $app.addEventListener('change', async (e) => {
   }
 });
 
-$app.addEventListener('submit', (e) => {
+$app.addEventListener('submit', async (e) => {
   const f = e.target;
+  if (f.dataset.form === 'schedule') {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(f));
+    const id = D.saveSchedule({ id: f.dataset.id || null, ...data });
+    location.replace('#/datang');
+    if (await confirmBox({ mood: 'senang', text: `Jadwal disimpan, ${sapa()}. Mau Sani masukkan ke <b>kalender HP</b> supaya ada pengingat?`, yes: '📅 Ya, masukkan', no: 'Tidak usah' })) {
+      addToCalendar(D.scheduleById(id));
+    }
+    return;
+  }
+  if (f.dataset.form === 'sync') {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(f));
+    let url = data.url.trim();
+    let token = data.token.trim().toUpperCase();
+    // Boleh juga menempel "link sambung" utuh dari HP lain
+    const m = url.match(/#\/sambung\?(.*)$/);
+    if (m) {
+      const q = new URLSearchParams(m[1]);
+      url = q.get('u') || '';
+      token = (q.get('k') || '').toUpperCase();
+    }
+    if (!url || !token) {
+      await confirmBox({ text: 'Alamat dan kode rahasia perlu diisi, atau tempel link sambung dari HP lain.', yes: 'Nggih', no: null });
+      return;
+    }
+    toast('Menyambungkan…');
+    const r = await S.testConnection(url, token);
+    if (!r.ok) {
+      await confirmBox({ text: `Maaf, belum bisa tersambung: ${esc(r.error)}.`, yes: 'Nggih', no: null });
+      return;
+    }
+    await S.syncNow();
+    toast('Tersambung ke Google Sheet ✔');
+    render();
+    return;
+  }
   if (f.dataset.form !== 'store') return;
   e.preventDefault();
   const data = Object.fromEntries(new FormData(f));
@@ -1107,6 +1498,24 @@ setInterval(() => {
 window.addEventListener('hashchange', render);
 applySettings();
 render();
+
+// ---------- Sinkron otomatis ----------
+D.onChange(() => {
+  if (D.dirtyRecords().length) S.syncSoon();
+});
+const SAFE_TO_REDRAW = ['', 'stok', 'rekap', 'daftar-nota', 'nota', 'datang'];
+S.onSyncDone(async (r) => {
+  const { path } = parse();
+  if (r.renumbered && r.renumbered.length) {
+    const list = r.renumbered.map((x) => `<b>${x.from}</b> → <b>${x.to}</b>`).join(', ');
+    await confirmBox({ mood: 'ingat', text: `${sapa()}, nomor nota berubah karena dibuat bersamaan di HP lain: ${list}. Kalau sudah terkirim ke WA, kirim ulang nggih.`, yes: 'Nggih', no: null });
+  }
+  if (SAFE_TO_REDRAW.includes(path) && !document.querySelector('.modal')) render();
+});
+S.syncNow();
+window.addEventListener('online', () => S.syncNow());
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && S.syncNow());
+setInterval(() => S.syncNow(), 5 * 60 * 1000);
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});

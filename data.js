@@ -1,5 +1,5 @@
 // Penyimpanan data di HP (localStorage untuk catatan, IndexedDB untuk foto).
-// Setiap catatan punya id unik + updatedAt supaya nanti mudah disinkronkan ke Google Sheet.
+// Setiap catatan punya id unik + updatedAt; perubahan ditandai _dirty sampai terkirim ke Google Sheet.
 
 const KEY = 'mbokni-v1';
 const DAY = 86400000;
@@ -19,6 +19,10 @@ const EMPTY = {
   stores: [],
   prices: {}, // harga titip per produk (opsional)
   notes: [],
+  schedules: [], // jadwal kiriman travel
+  counts: [], // hitung stok di rumah
+  config: { updatedAt: '1970-01-01T00:00:00.000Z' }, // penanda waktu harga & batas hari (ikut sinkron)
+  sync: { url: '', token: '', since: 0, lastAt: null, error: '' },
   settings: { textSize: 'besar', voice: true, maxDays: 30 },
 };
 
@@ -29,14 +33,30 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (!raw) return structuredClone(EMPTY);
     const data = JSON.parse(raw);
-    return { ...structuredClone(EMPTY), ...data, settings: { ...EMPTY.settings, ...data.settings } };
+    return {
+      ...structuredClone(EMPTY),
+      ...data,
+      settings: { ...EMPTY.settings, ...data.settings },
+      sync: { ...EMPTY.sync, ...data.sync },
+    };
   } catch {
     return structuredClone(EMPTY);
   }
 }
 
+const listeners = [];
+export const onChange = (fn) => listeners.push(fn);
+
 function save() {
   localStorage.setItem(KEY, JSON.stringify(state));
+  listeners.forEach((fn) => fn());
+}
+
+// Tandai catatan berubah supaya ikut terkirim saat sinkron.
+function touch(rec) {
+  rec.updatedAt = now();
+  rec._dirty = true;
+  return rec;
 }
 
 export const uid = () =>
@@ -50,6 +70,7 @@ export const getState = () => state;
 
 export function setSetting(key, value) {
   state.settings[key] = value;
+  if (key === 'maxDays') touch(state.config);
   save();
 }
 
@@ -57,6 +78,7 @@ export function setPrice(productId, value) {
   const n = Number(String(value).replace(/\D/g, ''));
   if (n > 0) state.prices[productId] = n;
   else delete state.prices[productId];
+  touch(state.config);
   save();
 }
 
@@ -65,12 +87,12 @@ export const activeStores = () => state.stores.filter((s) => !s.archived).sort((
 export const storeById = (id) => state.stores.find((s) => s.id === id);
 
 export function saveStore({ id, name, wa, address }) {
-  const clean = { name: name.trim(), wa: normalizeWA(wa), address: (address || '').trim(), updatedAt: now() };
+  const clean = { name: name.trim(), wa: normalizeWA(wa), address: (address || '').trim() };
   if (id) {
-    Object.assign(storeById(id), clean);
+    touch(Object.assign(storeById(id), clean));
   } else {
     id = uid();
-    state.stores.push({ id, ...clean, createdAt: now() });
+    state.stores.push(touch({ id, ...clean, createdAt: now() }));
   }
   save();
   return id;
@@ -80,7 +102,7 @@ export function archiveStore(id) {
   const s = storeById(id);
   if (s) {
     s.archived = true;
-    s.updatedAt = now();
+    touch(s);
     save();
   }
 }
@@ -105,19 +127,25 @@ export function receiversForStore(storeId) {
 
 // ---------- Nota ----------
 export const formatNo = (n) => 'MBOKNI-' + String(n).padStart(4, '0');
+const noNumber = (no) => Number(String(no || '').replace(/\D/g, '')) || 0;
+
+// Nomor berikutnya = nomor tertinggi yang pernah tercatat (di HP ini atau dari Sheet) + 1.
+function nextNo() {
+  const max = state.notes.reduce((m, n) => Math.max(m, noNumber(n.no)), state.counter || 0);
+  state.counter = max + 1;
+  return formatNo(state.counter);
+}
 
 function addNote(fields) {
-  state.counter += 1;
-  const note = {
+  const note = touch({
     id: uid(),
-    no: formatNo(state.counter),
+    no: nextNo(),
     status: 'aktif',
     photos: [],
     prices: { ...state.prices }, // harga saat nota dibuat
     createdAt: now(),
-    updatedAt: now(),
     ...fields,
-  };
+  });
   state.notes.push(note);
   save();
   return note;
@@ -164,7 +192,7 @@ export const owedOf = (n) => (n.type === 'cek' && n.status === 'aktif' && n.amou
 export function addPayment(id, amount) {
   const n = noteById(id);
   n.payments = [...(n.payments || []), { at: now(), amount }];
-  n.updatedAt = now();
+  touch(n);
   save();
 }
 
@@ -176,14 +204,14 @@ const notesOldestFirst = () => [...state.notes].sort((a, b) => a.createdAt.local
 export function cancelNote(id) {
   const n = noteById(id);
   n.status = 'batal';
-  n.updatedAt = now();
+  touch(n);
   save();
 }
 
 export function markSent(id) {
   const n = noteById(id);
   n.sentAt = now();
-  n.updatedAt = now();
+  touch(n);
   save();
 }
 
@@ -192,7 +220,7 @@ export async function addPhotoToNote(id, blob) {
   await putPhoto(photoId, blob);
   const n = noteById(id);
   n.photos.push(photoId);
-  n.updatedAt = now();
+  touch(n);
   save();
   return photoId;
 }
@@ -310,7 +338,7 @@ export async function compressPhoto(file) {
 const inRange = (iso, from, to) => iso >= from.toISOString() && iso < to.toISOString();
 
 export function recap(from, to) {
-  const out = { titip: {}, sold: {}, pulled: {}, sales: 0, salesUnknown: 0, received: 0, byStore: {}, ceks: 0 };
+  const out = { titip: {}, datang: {}, sold: {}, pulled: {}, sales: 0, salesUnknown: 0, received: 0, byStore: {}, ceks: 0 };
   const add = (map, pid, q) => (map[pid] = (map[pid] || 0) + q);
   for (const n of state.notes) {
     if (n.status !== 'aktif') continue;
@@ -319,6 +347,8 @@ export function recap(from, to) {
     if (!inRange(n.createdAt, from, to)) continue;
     if (n.type === 'titip') {
       for (const [pid, q] of Object.entries(n.items)) add(out.titip, pid, q);
+    } else if (n.type === 'datang') {
+      for (const [pid, q] of Object.entries(n.items)) add(out.datang, pid, q);
     } else if (n.type === 'cek') {
       out.ceks++;
       const soldQty = sum(n.sold);
@@ -357,4 +387,181 @@ export function suggestion(storeId) {
     if (need > 0) qty[p.id] = need;
   }
   return { perWeek, qty, interval: Math.round(interval) };
+}
+
+// ---------- Barang datang (kiriman travel) ----------
+export function createDatangNote(items, courier, scheduleId) {
+  const n = addNote({ type: 'datang', items: { ...items }, courier: (courier || '').trim(), scheduleId: scheduleId || null });
+  if (scheduleId) {
+    const sc = scheduleById(scheduleId);
+    if (sc) {
+      sc.status = 'tiba';
+      sc.noteId = n.id;
+      touch(sc);
+      save();
+    }
+  }
+  return n;
+}
+
+// Jadwal: { id, date: 'YYYY-MM-DD', time: 'HH:MM', courier, phone, note, status: 'menunggu'|'tiba'|'batal' }
+export const scheduleById = (id) => state.schedules.find((s) => s.id === id);
+
+export function saveSchedule({ id, date, time, courier, phone, note }) {
+  const clean = { date, time: time || '', courier: (courier || '').trim(), phone: (phone || '').replace(/[^\d+]/g, ''), note: (note || '').trim() };
+  if (id) touch(Object.assign(scheduleById(id), clean));
+  else {
+    id = uid();
+    state.schedules.push(touch({ id, ...clean, status: 'menunggu', createdAt: now() }));
+  }
+  save();
+  return id;
+}
+
+export function cancelSchedule(id) {
+  const sc = scheduleById(id);
+  sc.status = 'batal';
+  touch(sc);
+  save();
+}
+
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+export const scheduleDays = (sc) => Math.round((new Date(sc.date + 'T00:00') - new Date(todayStr() + 'T00:00')) / DAY);
+
+export const pendingSchedules = () =>
+  state.schedules.filter((s) => s.status === 'menunggu').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+
+// ---------- Stok di rumah ----------
+// Stok rumah = hitungan terakhir + barang datang sesudahnya − titipan sesudahnya.
+export function saveCount(items) {
+  state.counts.push(touch({ id: uid(), items: { ...items }, createdAt: now() }));
+  save();
+}
+
+export function homeStock() {
+  const events = [
+    ...state.counts.map((c) => ({ at: c.createdAt, kind: 'count', items: c.items })),
+    ...state.notes
+      .filter((n) => n.status === 'aktif' && (n.type === 'datang' || n.type === 'titip'))
+      .map((n) => ({ at: n.createdAt, kind: n.type, items: n.items })),
+  ].sort((a, b) => a.at.localeCompare(b.at));
+  const stock = {};
+  for (const e of events) {
+    if (e.kind === 'count') {
+      for (const p of PRODUCTS) stock[p.id] = e.items[p.id] || 0;
+    } else {
+      const sign = e.kind === 'datang' ? 1 : -1;
+      for (const [pid, q] of Object.entries(e.items)) stock[pid] = (stock[pid] || 0) + sign * q;
+    }
+  }
+  return { stock, known: events.some((e) => e.kind !== 'titip'), lastCount: state.counts.at(-1)?.createdAt || null };
+}
+
+// ---------- Sinkron ----------
+// Jenis catatan yang dikirim ke Sheet.
+const KINDS = { store: 'stores', note: 'notes', schedule: 'schedules', count: 'counts' };
+
+export function setSync(fields) {
+  Object.assign(state.sync, fields);
+  save();
+}
+
+export function dirtyRecords() {
+  const out = [];
+  for (const [kind, key] of Object.entries(KINDS)) {
+    for (const r of state[key]) if (r._dirty) out.push({ kind, id: r.id, updatedAt: r.updatedAt, data: strip(r) });
+  }
+  if (state.config._dirty) {
+    out.push({ kind: 'config', id: 'config', updatedAt: state.config.updatedAt, data: { prices: state.prices, maxDays: state.settings.maxDays } });
+  }
+  return out;
+}
+
+const strip = (r) => {
+  const { _dirty, ...rest } = r;
+  return rest;
+};
+
+// Setelah terkirim: bersihkan tanda, kecuali kalau sempat diubah lagi selama proses kirim.
+export function markSynced(sent) {
+  for (const s of sent) {
+    const rec = s.kind === 'config' ? state.config : state[KINDS[s.kind]]?.find((r) => r.id === s.id);
+    if (rec && rec.updatedAt === s.updatedAt) delete rec._dirty;
+  }
+  save();
+}
+
+// Terapkan catatan dari Sheet bila lebih baru dari yang ada di HP. Mengembalikan daftar nota yang berganti nomor.
+export function applyPulled(records) {
+  const renumbered = [];
+  for (const r of records) {
+    if (r.kind === 'config') {
+      if (r.updatedAt > state.config.updatedAt || !state.config._dirty) {
+        state.prices = r.data.prices || {};
+        if (r.data.maxDays) state.settings.maxDays = r.data.maxDays;
+        state.config = { updatedAt: r.updatedAt };
+      }
+      continue;
+    }
+    const key = KINDS[r.kind];
+    if (!key) continue;
+    const list = state[key];
+    const i = list.findIndex((x) => x.id === r.id);
+    if (i < 0) list.push(r.data);
+    else {
+      const local = list[i];
+      if (local.no && r.data.no && local.no !== r.data.no) renumbered.push({ from: local.no, to: r.data.no });
+      if (!local._dirty || r.updatedAt >= local.updatedAt) {
+        // foto yang ada di HP ini tetap disimpan
+        const photos = [...new Set([...(r.data.photos || []), ...(local.photos || [])])];
+        list[i] = local.photos ? { ...r.data, photos } : r.data;
+        if (local._dirty && list[i].photos?.length !== (r.data.photos || []).length) list[i]._dirty = true;
+      } else if (r.data.no && local.no !== r.data.no) {
+        local.no = r.data.no; // nomor dari Sheet selalu dipakai
+      }
+    }
+  }
+  save();
+  return renumbered;
+}
+
+// Foto di Drive: note.photoFiles = { photoId: fileId }
+export function setPhotoFile(noteId, photoId, fileId) {
+  const n = noteById(noteId);
+  if (!n) return;
+  n.photoFiles = { ...(n.photoFiles || {}), [photoId]: fileId };
+  touch(n);
+  save();
+}
+
+export async function hasLocalPhoto(id) {
+  return !!(await getPhoto(id));
+}
+
+export async function cachePhoto(id, blob) {
+  await putPhoto(id, blob);
+}
+
+// Saat pertama tersambung: kirim semua catatan yang sudah ada di HP ini.
+export function markAllDirty() {
+  for (const key of Object.values(KINDS)) for (const r of state[key]) r._dirty = true;
+  if (Object.keys(state.prices).length) {
+    state.config._dirty = true;
+    if (state.config.updatedAt.startsWith('1970')) state.config.updatedAt = now();
+  }
+  save();
+}
+
+// Nama travel yang pernah dipakai, terbaru dulu.
+export function recentCouriers() {
+  const names = [];
+  const src = [
+    ...notesNewestFirst().filter((n) => n.type === 'datang').map((n) => n.courier),
+    ...[...state.schedules].reverse().map((s) => s.courier),
+  ];
+  for (const c of src) if (c && !names.includes(c)) names.push(c);
+  return names.slice(0, 4);
 }

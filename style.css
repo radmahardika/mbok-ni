@@ -266,3 +266,14 @@ h2 { font-size: 1.25rem; margin-bottom: 0.5rem; }
 .sug { border-top: 2px solid var(--line); padding-top: 0.75rem; }
 .sug p { margin: 0 0 0.5rem; }
 .stat b.money { font-size: 1.2rem; white-space: nowrap; }
+
+/* Barang datang, stok rumah, sinkron */
+.tile.wide { grid-column: 1 / -1; min-height: 72px; flex-direction: row; gap: 0.75rem; }
+.tile.wide .ico { font-size: 1.6rem; }
+.section-h { font-size: 1.15rem; margin: 0.5rem 0 0; }
+.sched h2 { font-size: 1.4rem; }
+.sched.late { border-color: #e2b93b; background: #fff6d6; }
+.sync-line { text-align: center; color: var(--brown-soft); font-size: 0.9rem; margin: 0.25rem 0; }
+.photo-wait { grid-column: 1 / -1; color: var(--brown-soft); }
+.mini li { gap: 0.5rem; }
+.mini li b { white-space: nowrap; }

@@ -43,8 +43,21 @@ export function notaDoc(n) {
     no: n.no,
     date: n.createdAt,
     store: store ? store.name : '-',
+    storeLabel: 'Toko',
     receiver: n.receiver || '',
   };
+  if (n.type === 'datang') {
+    return {
+      ...base,
+      title: 'Barang Datang',
+      store: n.courier || '-',
+      storeLabel: 'Travel',
+      receiver: '',
+      sections: [{ title: '', rows: rowsOf(n.items) }],
+      totals: [['Jumlah', `${noteTotalQty(n)} bungkus`]],
+      status: null,
+    };
+  }
   if (n.type === 'cek') {
     const sisa = {};
     for (const p of PRODUCTS) {
@@ -86,7 +99,7 @@ export function notaDoc(n) {
 
 export function notaText(n) {
   const d = notaDoc(n);
-  const out = [`*${d.title.toUpperCase()} — MBOK NI*`, `No: *${d.no}*`, `Tanggal: ${tanggal(d.date)}`, `Toko: ${d.store}`];
+  const out = [`*${d.title.toUpperCase()} — MBOK NI*`, `No: *${d.no}*`, `Tanggal: ${tanggal(d.date)}`, `${d.storeLabel}: ${d.store}`];
   if (d.receiver) out.push(`${d.receiverLabel}: *${d.receiver}*`);
   for (const s of d.sections) {
     out.push('');
@@ -149,7 +162,7 @@ export async function notaImage(n) {
 
   g.fillStyle = '#3a2314';
   g.font = font(500, 34);
-  g.fillText('Toko', 60, 320);
+  g.fillText(d.storeLabel, 60, 320);
   g.font = font(800, 52);
   g.fillText(d.store, 60, 385);
   let y = 385;
