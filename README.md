@@ -32,7 +32,7 @@ Dipakai Juragan (Android & iPhone), dibantu staf virtual **SANI**. Sani memanggi
 - **Rekap** Minggu ini / Bulan ini / Bulan lalu: laku, uang masuk (menurut tanggal bayar), dititip, belum dibayar, laku per produk, **toko terlaris**.
 - **Saran titip**: dari kecepatan laku (maks. 4 cek terakhir) × jarak kunjungan rata-rata + 20% cadangan − stok di toko. Muncul di Rekap dan di layar Jumlah Titipan (*Pakai saran Sani*).
 - **Kirim rekap** sebagai gambar sederhana ke WA.
-- Stok di rumah belum dicatat (menunggu Barang Datang/travel & Shopee).
+- Stok di rumah dicatat di Tahap 4 (Barang Datang & hitung stok rumah).
 
 ## Tahap 4 — Barang Datang & stok rumah (sudah)
 - **Jadwal kiriman travel**: tanggal, jam, nama travel, HP sopir (bisa langsung ditelepon), catatan.
@@ -48,17 +48,16 @@ Dipakai Juragan (Android & iPhone), dibantu staf virtual **SANI**. Sani memanggi
 - Sheet berisi tab **Nota**, **Toko**, **Kiriman** yang mudah dibaca.
 - Uji tanpa Google: `node tests/mock-apps-script.mjs 8770`.
 
-## Tahap 6 — Pesanan Shopee (sudah)
-- Shopee dicatat **seperti toko**: stok yang diambil penjual Shopee = titip ke "Shopee".
-- **Ambil penjualan** dari sheet *Mbokni Shopee* (tab bulanan, mis. `Nov26`) lewat Apps Script; hanya tambahan sejak pengambilan terakhir yang dicatat (aman diulang, aman dari dua HP).
-- Pecel di sheet Shopee tidak ada rasanya → stok pecel Shopee dihitung **gabungan**; di catatan internal dibagi ke tiap rasa sebanding stok.
-- Setoran dari sheet jadi **Nota Pembayaran Shopee** (bisa dicatat lunas/sebagian), ikut Rekap & toko terlaris.
+## Tahap 6 — Penjualan Shopee (sudah)
+- **Hanya info**: menampilkan penjualan dari sheet *Mbokni Shopee* (tab bulanan, mis. `Nov26`) — tidak mengubah stok atau nota.
+- Bulan ini / bulan lalu: Pecel (semua rasa), Gado-gado, total bungkus, setoran, dan penjualan per hari.
+- Dibaca lewat Apps Script (`SHOPEE_SHEET_ID` diisi saat memasang); hasil terakhir disimpan di HP supaya tetap bisa dilihat tanpa sinyal.
 
 ## Rencana
 1. ✅ Titip ke toko + nota
 2. ✅ Cek toko & pembayaran
 3. ✅ Stok & rekap, toko terlaris, saran titip
-4. ✅ Pesanan Shopee (dari Google Sheet pencatatan harian)
+4. ✅ Penjualan Shopee (info dari Google Sheet pencatatan harian)
 5. ✅ Jadwal travel & pengingat
 + ✅ Sinkron data antar-HP (Google Sheet + Google Drive untuk foto)
 

@@ -10,7 +10,7 @@ Pakai akun Google keluarga yang akan menyimpan catatan Mbok Ni.
 ## 2. Pasang skrip
 1. Di Sheet itu: menu **Ekstensi → Apps Script** (*Extensions → Apps Script*).
 2. Hapus semua isi `Code.gs`, lalu tempel seluruh isi file [`Code.gs`](Code.gs) dari folder ini. Klik 💾 **Simpan**.
-3. **Untuk Pesanan Shopee:** di baris `var SHOPEE_SHEET_ID = '';` isi ID sheet **Mbokni Shopee**, yaitu bagian alamat di antara `/d/` dan `/edit`.
+3. **Untuk Penjualan Shopee:** di baris `var SHOPEE_SHEET_ID = '';` isi ID sheet **Mbokni Shopee**, yaitu bagian alamat di antara `/d/` dan `/edit`.
    Contoh: `var SHOPEE_SHEET_ID = '1AbC…xyz';` lalu Simpan. (ID ini sengaja tidak disimpan di repo.)
    Sheet Shopee harus bisa dibuka oleh akun yang sama.
 4. Di bagian atas, pilih fungsi **`setup`** lalu klik **▶ Jalankan** (*Run*).
@@ -58,11 +58,9 @@ Foto nota kertas tersimpan di Google Drive, folder **Mbok Ni - Foto Nota**.
 - Sinkron otomatis saat aplikasi dibuka, sebelum membuat nota, setelah ada perubahan, dan tiap 5 menit.
 - Nomor nota dijaga **tidak dobel**: kalau dua HP membuat nota bersamaan saat salah satunya tanpa sinyal, Sheet memberi nomor baru dan Sani memberi tahu Juragan.
 
-## Pesanan Shopee
-- Di aplikasi: **🛒 Pesanan Shopee** → **📥 Ambil penjualan [bulan]**. Sani membaca tab bulan itu (mis. `Nov26`) dan hanya mencatat **penjualan baru** sejak terakhir diambil, jadi aman diambil berkali-kali.
-- Yang dihitung hanya kode **PC…** (Pecel, semua rasa) dan **GD…** (Gado-gado / Bumbu Kacang). E-Money, Kremesan, Saripohatji, dll. diabaikan.
-- Setoran diambil dari kolom **HARGA** (jumlah × setor). Hasilnya jadi **Nota Pembayaran Shopee** yang bisa ditandai lunas.
-- Stok yang diambil penjual Shopee dicatat lewat **Catat stok diambil penjual Shopee** (sama seperti titip ke toko).
+## Penjualan Shopee
+- Di aplikasi: **🛒 Penjualan Shopee** menampilkan penjualan bulan ini / bulan lalu dari sheet **Mbokni Shopee** — **hanya info**, tidak mengubah stok atau nota.
+- Yang dihitung hanya kode **PC…** (Pecel, semua rasa) dan **GD…** (Gado-gado). E-Money, Kremesan, Saripohatji, dll. diabaikan. Setoran dari kolom **HARGA**.
 - Nama tab harus mengikuti pola yang sudah ada: `Jan Feb Mar Apr Mei Jun Jul Agt Sep Okt Nov Des` + 2 angka tahun.
 
 ## Kalau skrip diperbarui
