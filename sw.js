@@ -1,5 +1,5 @@
 // Simpan file aplikasi supaya tetap bisa dibuka tanpa sinyal.
-const CACHE = 'mbokni-v1';
+const CACHE = 'mbokni-v2';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'data.js', 'nota.js', 'sani.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {

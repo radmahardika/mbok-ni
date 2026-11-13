@@ -19,9 +19,17 @@ Dipakai Bapak (Android) dan Ibu (iPhone), dibantu staf virtual **SANI**.
 - Nota bisa dibatalkan (tetap tersimpan, ditandai batal).
 - Setelan: daftar toko, harga titip (opsional), ukuran huruf, suara, ganti pengguna, cadangan data.
 
+## Tahap 2 — Cek Toko & Tagih (sudah)
+- Pilih toko → **hitung sisa di rak** (angka sudah diisi sesuai catatan Sani) → **tarik** barang lama/rusak → ringkasan & pembayaran → **Nota Tagihan**.
+- Laku = catatan Sani − sisa di rak. Tagihan = laku × harga titip (dari Setelan).
+- Pembayaran: lunas / sebagian / belum. Kekurangan bisa dicatat belakangan ("Catat pembayaran").
+- Sani mengingatkan barang yang sudah lama di toko (batas hari diatur di Setelan, bawaan 30 hari).
+- Setelah cek, tombol **Titip lagi ke toko ini** mengisi otomatis sejumlah yang laku + ditarik.
+- Setiap nota mencatat **nama petugas toko** (penerima), dengan pilihan cepat nama yang pernah dipakai.
+
 ## Rencana
 1. ✅ Titip ke toko + nota
-2. Cek toko & tagih (hitung sisa di rak → laku & tagihan, tarik barang lama)
+2. ✅ Cek toko & tagih
 3. Stok & rekap (rekap dalam bentuk gambar sederhana), toko terlaris, saran titip
 4. Pesanan Shopee (dari Google Sheet pencatatan harian)
 5. Jadwal travel & pengingat

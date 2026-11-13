@@ -2,11 +2,12 @@
 // Setiap catatan punya id unik + updatedAt supaya nanti mudah disinkronkan ke Google Sheet.
 
 const KEY = 'mbokni-v1';
+const DAY = 86400000;
 
 export const PRODUCTS = [
   { id: 'pedas', name: 'Bumbu Pecel Pedas', short: 'Pecel Pedas', size: '100 g', color: '#c8372d' },
   { id: 'sedang', name: 'Bumbu Pecel Sedang', short: 'Pecel Sedang', size: '100 g', color: '#e07b1f' },
-  { id: 'tidak', name: 'Bumbu Pecel Tidak Pedas', short: 'Pecel Tdk Pedas', size: '100 g', color: '#4f9a2f' },
+  { id: 'tidak', name: 'Bumbu Pecel Tidak Pedas', short: 'Pecel Tidak Pedas', size: '100 g', color: '#4f9a2f' },
   { id: 'kacang', name: 'Bumbu Kacang Serbaguna', short: 'Bumbu Kacang', size: '200 g', color: '#7a4a1f' },
 ];
 
@@ -19,7 +20,7 @@ const EMPTY = {
   stores: [],
   prices: {}, // harga titip per produk (opsional)
   notes: [],
-  settings: { textSize: 'besar', voice: true },
+  settings: { textSize: 'besar', voice: true, maxDays: 30 },
 };
 
 let state = load();
@@ -43,6 +44,8 @@ export const uid = () =>
   (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
 const now = () => new Date().toISOString();
+const sum = (obj) => Object.values(obj || {}).reduce((a, b) => a + b, 0);
+export const daysSince = (iso) => Math.floor((Date.now() - new Date(iso).getTime()) / DAY);
 
 export const getState = () => state;
 
@@ -97,32 +100,85 @@ export function normalizeWA(raw) {
   return d;
 }
 
+// Nama petugas toko yang pernah menerima, terbaru dulu (untuk pilihan cepat).
+export function receiversForStore(storeId) {
+  const names = [];
+  for (const n of notesNewestFirst()) {
+    if (n.storeId === storeId && n.receiver && !names.includes(n.receiver)) names.push(n.receiver);
+  }
+  return names.slice(0, 4);
+}
+
 // ---------- Nota ----------
 export const formatNo = (n) => 'MBOKNI-' + String(n).padStart(4, '0');
 
-export function createTitipNote(storeId, items) {
+function addNote(fields) {
   state.counter += 1;
   const note = {
     id: uid(),
     no: formatNo(state.counter),
-    type: 'titip',
-    storeId,
-    items: { ...items },
-    prices: { ...state.prices }, // harga saat nota dibuat
     status: 'aktif',
     photos: [],
+    prices: { ...state.prices }, // harga saat nota dibuat
     createdAt: now(),
     createdBy: state.user,
     updatedAt: now(),
+    ...fields,
   };
   state.notes.push(note);
   save();
   return note;
 }
 
+export function createTitipNote(storeId, items, receiver) {
+  return addNote({ type: 'titip', storeId, items: { ...items }, receiver: receiver.trim() });
+}
+
+// Cek toko: expected = catatan Sani, counted = hitungan di rak, pulled = ditarik.
+export function createCekNote({ storeId, expected, counted, pulled, receiver, amount, paid }) {
+  const sold = {};
+  for (const p of PRODUCTS) {
+    const s = Math.max(0, (expected[p.id] || 0) - (counted[p.id] || 0));
+    if (s) sold[p.id] = s;
+  }
+  const payments = paid > 0 ? [{ at: now(), amount: paid, by: state.user }] : [];
+  return addNote({
+    type: 'cek',
+    storeId,
+    expected: { ...expected },
+    counted: { ...counted },
+    pulled: { ...pulled },
+    sold,
+    receiver: receiver.trim(),
+    amount, // tagihan (Rp) atau null bila harga belum ada dan tidak ada uang
+    payments,
+  });
+}
+
+export function billFor(sold, prices = state.prices) {
+  let total = 0;
+  for (const [pid, q] of Object.entries(sold)) {
+    if (!q) continue;
+    if (!prices[pid]) return null;
+    total += q * prices[pid];
+  }
+  return total;
+}
+
+export const paidOf = (n) => (n.payments || []).reduce((a, p) => a + p.amount, 0);
+export const owedOf = (n) => (n.type === 'cek' && n.status === 'aktif' && n.amount ? Math.max(0, n.amount - paidOf(n)) : 0);
+
+export function addPayment(id, amount) {
+  const n = noteById(id);
+  n.payments = [...(n.payments || []), { at: now(), amount, by: state.user }];
+  n.updatedAt = now();
+  save();
+}
+
 export const noteById = (id) => state.notes.find((n) => n.id === id);
 
 export const notesNewestFirst = () => [...state.notes].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+const notesOldestFirst = () => [...state.notes].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
 export function cancelNote(id) {
   const n = noteById(id);
@@ -149,29 +205,59 @@ export async function addPhotoToNote(id, blob) {
   return photoId;
 }
 
-export const noteTotalQty = (n) => Object.values(n.items).reduce((a, b) => a + b, 0);
+export const noteTotalQty = (n) => sum(n.items);
 
 export function noteTotalMoney(n) {
-  let total = 0;
-  for (const [pid, qty] of Object.entries(n.items)) {
-    if (!n.prices[pid]) return null; // harga belum lengkap
-    total += qty * n.prices[pid];
-  }
-  return total;
+  return billFor(n.items, n.prices);
 }
 
-// Jumlah barang yang sedang dititip di tiap toko (dari nota aktif).
+// ---------- Stok di toko ----------
+// Stok = hasil cek terakhir (sisa di rak − ditarik) + titipan sesudahnya.
+// Kalau nota cek dibatalkan, otomatis kembali ke cek sebelumnya.
 export function stockAtStore(storeId) {
   const out = {};
-  for (const n of state.notes) {
-    if (n.storeId !== storeId || n.status !== 'aktif' || n.type !== 'titip') continue;
-    for (const [pid, q] of Object.entries(n.items)) out[pid] = (out[pid] || 0) + q;
+  for (const n of notesOldestFirst()) {
+    if (n.storeId !== storeId || n.status !== 'aktif') continue;
+    if (n.type === 'cek') {
+      for (const p of PRODUCTS) out[p.id] = Math.max(0, (n.counted[p.id] || 0) - (n.pulled[p.id] || 0));
+    } else if (n.type === 'titip') {
+      for (const [pid, q] of Object.entries(n.items)) out[pid] = (out[pid] || 0) + q;
+    }
+  }
+  for (const k of Object.keys(out)) if (!out[k]) delete out[k];
+  return out;
+}
+
+// Umur barang tertua yang masih di toko, per produk (barang lama dianggap laku duluan).
+export function oldestAtStore(storeId) {
+  const stock = stockAtStore(storeId);
+  const out = {};
+  const titips = notesNewestFirst().filter((n) => n.storeId === storeId && n.status === 'aktif' && n.type === 'titip');
+  for (const [pid, left] of Object.entries(stock)) {
+    let need = left;
+    // Ambil dari titipan terbaru ke belakang sampai jumlah stok terpenuhi; yang terakhir = tertua.
+    for (const n of titips) {
+      if (!n.items[pid]) continue;
+      out[pid] = n.createdAt;
+      need -= n.items[pid];
+      if (need <= 0) break;
+    }
   }
   return out;
 }
 
-export const lastNoteForStore = (storeId) =>
-  notesNewestFirst().find((n) => n.storeId === storeId && n.status === 'aktif');
+// Produk yang sudah terlalu lama di toko (lebih dari batas hari).
+export function oldItemsAtStore(storeId) {
+  const max = state.settings.maxDays;
+  return Object.entries(oldestAtStore(storeId))
+    .map(([pid, iso]) => ({ pid, days: daysSince(iso) }))
+    .filter((x) => x.days >= max);
+}
+
+export const lastNoteForStore = (storeId, type) =>
+  notesNewestFirst().find((n) => n.storeId === storeId && n.status === 'aktif' && (!type || n.type === type));
+
+export const unpaidNotes = () => notesNewestFirst().filter((n) => owedOf(n) > 0);
 
 // ---------- Cadangan ----------
 export function exportData() {
@@ -181,7 +267,7 @@ export function exportData() {
 export function importData(json) {
   const data = JSON.parse(json);
   if (!data || !Array.isArray(data.notes) || !Array.isArray(data.stores)) throw new Error('File bukan cadangan Mbok Ni');
-  state = { ...structuredClone(EMPTY), ...data };
+  state = { ...structuredClone(EMPTY), ...data, settings: { ...EMPTY.settings, ...data.settings } };
   save();
 }
 

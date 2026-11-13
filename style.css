@@ -98,8 +98,10 @@ h2 { font-size: 1.25rem; margin-bottom: 0.5rem; }
   text-align: center; font-size: 1.05rem;
 }
 .tile .ico { font-size: 2.4rem; line-height: 1; }
-.tile.primary { grid-column: 1 / -1; background: var(--green); color: #fff; min-height: 150px; font-size: 1.35rem; }
-.tile.soon { opacity: 0.55; }
+.tile.primary { background: var(--green); color: #fff; min-height: 150px; font-size: 1.15rem; }
+.tile.yellow { background: var(--yellow); min-height: 150px; font-size: 1.15rem; }
+.tile.soon { opacity: 0.55; min-height: 104px; font-size: 0.9rem; }
+.tile.soon .ico { font-size: 1.8rem; }
 .tile small { font-weight: 600; font-size: 0.75rem; background: var(--yellow); border-radius: 8px; padding: 0 0.4rem; color: var(--brown); }
 .whoami { text-align: center; color: var(--brown-soft); font-size: 0.85rem; }
 
@@ -201,6 +203,37 @@ h2 { font-size: 1.25rem; margin-bottom: 0.5rem; }
   background: var(--brown); color: #fff; padding: 0.9rem 1.4rem; border-radius: 16px; font-weight: 700; z-index: 30;
   box-shadow: 0 6px 20px #0004;
 }
-.menu { grid-template-columns: repeat(3, 1fr); }
-.tile.soon { min-height: 120px; font-size: 0.85rem; padding: 0.5rem 0.25rem; }
-.tile.soon .ico { font-size: 1.9rem; }
+
+.btn.yellow { background: var(--yellow); }
+.step[disabled] { opacity: 0.35; }
+.qty-num.as-text { display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+.qty-note { color: var(--brown-soft); font-size: 0.95rem; }
+.warn-text { color: var(--red); }
+
+/* Pengingat di beranda */
+.remind {
+  display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--brown);
+  background: #fff6d6; border: 3px solid #e2b93b; border-radius: 16px; padding: 0.75rem 0.9rem; min-height: var(--tap);
+}
+.remind .ico { font-size: 1.6rem; }
+.remind .go { margin-left: auto; font-size: 1.6rem; font-weight: 800; }
+
+/* Nama petugas toko */
+.chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+.chip {
+  font: inherit; font-weight: 700; min-height: 52px; padding: 0 1rem; border-radius: 26px;
+  border: 3px solid var(--brown); background: var(--cream); color: var(--brown);
+}
+.chip.on { background: var(--green); color: #fff; }
+
+/* Nota */
+.receiver { margin: 0.25rem 0 0.5rem; font-size: 1.05rem; }
+.sec-title { margin: 1rem 0 0; font-weight: 800; color: var(--green-dark); text-transform: uppercase; font-size: 0.9rem; }
+.pay-pill { text-align: center; font-weight: 900; font-size: 1.15rem; border-radius: 12px; padding: 0.6rem; margin: 0.75rem 0; }
+.pay-pill.ok { background: #dff2d3; color: var(--green-dark); }
+.pay-pill.warn { background: #fff0c2; color: #8a5a00; }
+.b.type { background: var(--cream); border: 2px solid var(--line); color: var(--brown); }
+
+/* Isian angka besar */
+.num-wrap { display: flex; align-items: center; gap: 0.5rem; font-size: 1.4rem; font-weight: 800; }
+.num-input { font-size: 2rem; font-weight: 900; text-align: center; min-height: 80px; }
