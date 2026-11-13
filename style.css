@@ -1,0 +1,206 @@
+/* Warna diambil dari stiker Mbok Ni: hijau + kuning, dengan cokelat kebaya SANI. */
+:root {
+  --green: #5aa832;
+  --green-dark: #3f7f20;
+  --yellow: #f4ef8d;
+  --brown: #3a2314;
+  --brown-soft: #7a6040;
+  --cream: #fffaf0;
+  --card: #ffffff;
+  --line: #e6d9bd;
+  --red: #c0392b;
+  --wa: #1fa855;
+  --fs: 20px;
+  --tap: 64px;
+}
+html[data-size='sangat'] { --fs: 24px; --tap: 74px; }
+
+* { box-sizing: border-box; }
+html { font-size: var(--fs); -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--cream);
+  color: var(--brown);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.4;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+h1, h2 { margin: 0; line-height: 1.2; }
+h2 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+.muted { color: var(--brown-soft); margin: 0 0 0.25rem; }
+.small { font-size: 0.8rem; }
+
+.page { max-width: 560px; margin: 0 auto; padding: 1rem 1rem 6rem; display: flex; flex-direction: column; gap: 1rem; }
+.stack { display: flex; flex-direction: column; gap: 0.75rem; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.row-sb { display: flex; justify-content: space-between; gap: 0.5rem; }
+
+/* Bar atas */
+.top {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: calc(0.5rem + env(safe-area-inset-top)) 1rem 0.5rem;
+  background: var(--green); color: var(--yellow);
+}
+.top h1 { font-size: 1.2rem; }
+.back {
+  color: var(--brown); background: var(--yellow); text-decoration: none; font-weight: 700;
+  min-height: 52px; padding: 0 1rem; border-radius: 14px; display: inline-flex; align-items: center;
+}
+
+/* SANI */
+.sani { display: flex; gap: 0.75rem; align-items: flex-end; }
+.sani-img { flex: 0 0 96px; height: 128px; animation: bob 2.4s ease-in-out infinite; }
+.sani-img svg { width: 96px; height: 128px; image-rendering: pixelated; }
+@keyframes bob { 50% { transform: translateY(-3px); } }
+.bubble {
+  position: relative; flex: 1; background: var(--card); border: 3px solid var(--brown);
+  border-radius: 18px; padding: 0.75rem 0.9rem; margin-bottom: 1.5rem;
+  box-shadow: 0 3px 0 var(--brown);
+}
+.bubble::before {
+  content: ''; position: absolute; left: -14px; bottom: 18px;
+  border: 8px solid transparent; border-right: 12px solid var(--brown);
+}
+.bubble p { margin: 0; font-size: 1.05rem; }
+.speak {
+  margin-top: 0.5rem; font: inherit; font-size: 0.85rem; border: 2px solid var(--line);
+  background: var(--cream); border-radius: 12px; padding: 0.35rem 0.75rem; color: var(--brown); min-height: 44px;
+}
+
+/* Tombol */
+.btn {
+  font: inherit; font-weight: 700; color: var(--brown); text-decoration: none; text-align: center;
+  background: var(--card); border: 3px solid var(--brown); border-radius: 16px;
+  min-height: var(--tap); padding: 0.5rem 1rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  box-shadow: 0 4px 0 var(--brown); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--brown); }
+.btn[disabled] { opacity: 0.4; }
+.btn.big { font-size: 1.05rem; }
+.btn.huge { font-size: 1.2rem; min-height: calc(var(--tap) + 12px); }
+.btn.primary { background: var(--green); color: #fff; }
+.btn.wa { background: var(--wa); color: #fff; }
+.btn.danger { background: var(--red); color: #fff; }
+.btn.ghost { background: transparent; box-shadow: none; }
+.btn.dashed { border-style: dashed; box-shadow: none; }
+.small-danger {
+  font: inherit; font-size: 0.9rem; background: none; border: none; color: var(--red);
+  text-decoration: underline; min-height: 52px;
+}
+
+/* Menu utama */
+.menu { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.tile {
+  font: inherit; font-weight: 800; color: var(--brown); text-decoration: none;
+  background: var(--card); border: 3px solid var(--brown); border-radius: 20px; box-shadow: 0 4px 0 var(--brown);
+  min-height: 140px; padding: 0.75rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem;
+  text-align: center; font-size: 1.05rem;
+}
+.tile .ico { font-size: 2.4rem; line-height: 1; }
+.tile.primary { grid-column: 1 / -1; background: var(--green); color: #fff; min-height: 150px; font-size: 1.35rem; }
+.tile.soon { opacity: 0.55; }
+.tile small { font-weight: 600; font-size: 0.75rem; background: var(--yellow); border-radius: 8px; padding: 0 0.4rem; color: var(--brown); }
+.whoami { text-align: center; color: var(--brown-soft); font-size: 0.85rem; }
+
+/* Pilihan (toko, nota) */
+.pick {
+  font: inherit; color: var(--brown); text-decoration: none; text-align: left;
+  background: var(--card); border: 3px solid var(--brown); border-radius: 16px; box-shadow: 0 4px 0 var(--brown);
+  min-height: var(--tap); padding: 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.15rem;
+}
+.pick b { font-size: 1.15rem; }
+.pick small { color: var(--brown-soft); }
+.note-item.batal { opacity: 0.55; }
+.badges { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.25rem; }
+.b { font-style: normal; font-size: 0.8rem; font-weight: 700; padding: 0.1rem 0.5rem; border-radius: 8px; }
+.b.ok { background: #dff2d3; color: var(--green-dark); }
+.b.warn { background: #fff0c2; color: #8a5a00; }
+.b.bad { background: #f8d7d3; color: var(--red); }
+
+/* Jumlah */
+.qty-card {
+  background: var(--card); border: 3px solid var(--brown); border-left: 14px solid var(--c);
+  border-radius: 16px; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;
+}
+.qty-name { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 1.1rem; }
+.qty-name small { color: var(--brown-soft); }
+.qty-row { display: grid; grid-template-columns: var(--tap) 1fr var(--tap); gap: 0.5rem; align-items: center; }
+.step {
+  font: inherit; font-size: 2rem; font-weight: 800; height: var(--tap); border-radius: 16px;
+  border: 3px solid var(--brown); background: var(--yellow); color: var(--brown); box-shadow: 0 3px 0 var(--brown);
+}
+.step:active { transform: translateY(2px); box-shadow: none; }
+.qty-num {
+  font: inherit; font-size: 2rem; font-weight: 900; height: var(--tap); border-radius: 14px;
+  border: 2px dashed var(--line); background: var(--cream); color: var(--brown);
+}
+.plus10 {
+  font: inherit; font-size: 0.9rem; font-weight: 700; min-height: 48px; border-radius: 12px;
+  border: 2px solid var(--line); background: var(--cream); color: var(--brown);
+}
+.sticky { position: sticky; bottom: calc(0.75rem + env(safe-area-inset-bottom)); }
+
+/* Kartu & nota */
+.card { background: var(--card); border: 3px solid var(--brown); border-radius: 18px; padding: 1rem; }
+.sum { list-style: none; margin: 0.75rem 0; padding: 0; }
+.sum li {
+  display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
+  padding: 0.6rem 0 0.6rem 0.75rem; border-bottom: 2px solid var(--line); border-left: 8px solid var(--c);
+}
+.sum li span { display: flex; flex-direction: column; }
+.sum li small { color: var(--brown-soft); font-size: 0.8rem; }
+.sum li b { font-size: 1.6rem; padding-right: 0.25rem; }
+.sum-total { display: flex; justify-content: space-between; font-size: 1.1rem; margin: 0.25rem 0; }
+
+.nota { position: relative; background: var(--card); border: 3px solid var(--brown); border-radius: 18px; overflow: hidden; }
+.nota-head {
+  background: var(--green); color: var(--yellow); padding: 0.9rem 1rem 1.2rem;
+  display: flex; justify-content: space-between; gap: 0.5rem;
+  -webkit-mask: radial-gradient(10px at 50% 100%, #0000 98%, #000) 50% / 20px 100%;
+          mask: radial-gradient(10px at 50% 100%, #0000 98%, #000) 50% / 20px 100%;
+}
+.brand { white-space: nowrap; font-size: 1.6rem; font-weight: 900; letter-spacing: 0.02em; }
+.nota-no { text-align: right; white-space: nowrap; font-size: 0.85rem; }
+.nota-no b { font-size: 1.1rem; }
+.nota-body { padding: 0.75rem 1rem 1rem; }
+.nota.void .nota-body { opacity: 0.5; }
+.stamp {
+  position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%) rotate(-14deg);
+  border: 5px solid var(--red); color: var(--red); font-weight: 900; font-size: 1.8rem; padding: 0.2rem 1rem; border-radius: 10px;
+  background: #fffaf0cc;
+}
+
+.photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+.photos p { grid-column: 1 / -1; margin: 0; }
+.photos img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 12px; border: 3px solid var(--brown); }
+
+/* Formulir */
+.field { display: flex; flex-direction: column; gap: 0.35rem; font-weight: 700; }
+.input {
+  font: inherit; font-size: 1.05rem; min-height: var(--tap); padding: 0 0.9rem;
+  border: 3px solid var(--brown); border-radius: 14px; background: #fff; color: var(--brown); width: 100%;
+}
+.input:focus { outline: 4px solid var(--yellow); }
+
+/* Dialog */
+.modal {
+  position: fixed; inset: 0; z-index: 20; background: #2a1b12cc;
+  display: flex; align-items: flex-end; justify-content: center; padding: 1rem;
+}
+.modal-card {
+  width: 100%; max-width: 520px; background: var(--cream); border-radius: 22px; padding: 1rem;
+  display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: env(safe-area-inset-bottom);
+}
+.viewer { flex-direction: column; align-items: center; justify-content: center; gap: 1rem; }
+.viewer img { max-width: 100%; max-height: 80vh; border-radius: 12px; }
+.viewer .btn { width: 100%; max-width: 520px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(1.5rem + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  background: var(--brown); color: #fff; padding: 0.9rem 1.4rem; border-radius: 16px; font-weight: 700; z-index: 30;
+  box-shadow: 0 6px 20px #0004;
+}
+.menu { grid-template-columns: repeat(3, 1fr); }
+.tile.soon { min-height: 120px; font-size: 0.85rem; padding: 0.5rem 0.25rem; }
+.tile.soon .ico { font-size: 1.9rem; }
