@@ -10,10 +10,13 @@ Pakai akun Google keluarga yang akan menyimpan catatan Mbok Ni.
 ## 2. Pasang skrip
 1. Di Sheet itu: menu **Ekstensi → Apps Script** (*Extensions → Apps Script*).
 2. Hapus semua isi `Code.gs`, lalu tempel seluruh isi file [`Code.gs`](Code.gs) dari folder ini. Klik 💾 **Simpan**.
-3. Di bagian atas, pilih fungsi **`setup`** lalu klik **▶ Jalankan** (*Run*).
-4. Google akan minta izin: **Tinjau izin** → pilih akun → **Lanjutan / Advanced** → **Buka … (tidak aman)** → **Izinkan**.
-   Izin ini untuk menulis ke Sheet ini dan menyimpan foto nota di Google Drive akun ini.
-5. Lihat **Log eksekusi** di bawah: ada tulisan **`KODE RAHASIA: XXXXXXXXXXXX`**. Catat kodenya.
+3. **Untuk Pesanan Shopee:** di baris `var SHOPEE_SHEET_ID = '';` isi ID sheet **Mbokni Shopee**, yaitu bagian alamat di antara `/d/` dan `/edit`.
+   Contoh: `var SHOPEE_SHEET_ID = '1AbC…xyz';` lalu Simpan. (ID ini sengaja tidak disimpan di repo.)
+   Sheet Shopee harus bisa dibuka oleh akun yang sama.
+4. Di bagian atas, pilih fungsi **`setup`** lalu klik **▶ Jalankan** (*Run*).
+5. Google akan minta izin: **Tinjau izin** → pilih akun → **Lanjutan / Advanced** → **Buka … (tidak aman)** → **Izinkan**.
+   Izin ini untuk menulis ke Sheet ini, membaca sheet Shopee, dan menyimpan foto nota di Google Drive akun ini.
+6. Lihat **Log eksekusi** di bawah: ada tulisan **`KODE RAHASIA: XXXXXXXXXXXX`**. Catat kodenya.
 
 ## 3. Terbitkan sebagai Web App
 1. Klik **Terapkan → Deployment baru** (*Deploy → New deployment*).
@@ -55,6 +58,13 @@ Foto nota kertas tersimpan di Google Drive, folder **Mbok Ni - Foto Nota**.
 - Sinkron otomatis saat aplikasi dibuka, sebelum membuat nota, setelah ada perubahan, dan tiap 5 menit.
 - Nomor nota dijaga **tidak dobel**: kalau dua HP membuat nota bersamaan saat salah satunya tanpa sinyal, Sheet memberi nomor baru dan Sani memberi tahu Juragan.
 
+## Pesanan Shopee
+- Di aplikasi: **🛒 Pesanan Shopee** → **📥 Ambil penjualan [bulan]**. Sani membaca tab bulan itu (mis. `Nov26`) dan hanya mencatat **penjualan baru** sejak terakhir diambil, jadi aman diambil berkali-kali.
+- Yang dihitung hanya kode **PC…** (Pecel, semua rasa) dan **GD…** (Gado-gado / Bumbu Kacang). E-Money, Kremesan, Saripohatji, dll. diabaikan.
+- Setoran diambil dari kolom **HARGA** (jumlah × setor). Hasilnya jadi **Nota Pembayaran Shopee** yang bisa ditandai lunas.
+- Stok yang diambil penjual Shopee dicatat lewat **Catat stok diambil penjual Shopee** (sama seperti titip ke toko).
+- Nama tab harus mengikuti pola yang sudah ada: `Jan Feb Mar Apr Mei Jun Jul Agt Sep Okt Nov Des` + 2 angka tahun.
+
 ## Kalau skrip diperbarui
-Tempel `Code.gs` versi baru → Simpan → **Terapkan → Kelola deployment** → ✏️ → *Versi: Versi baru* → **Terapkan**.
-Alamat `/exec` tetap sama, HP tidak perlu disambungkan ulang.
+Tempel `Code.gs` versi baru (isi lagi `SHOPEE_SHEET_ID`) → Simpan → **Terapkan → Kelola deployment** → ✏️ → *Versi: Versi baru* → **Terapkan**.
+Alamat `/exec` tetap sama, HP tidak perlu disambungkan ulang. Kalau Google minta izin baru, jalankan `setup` sekali lagi.

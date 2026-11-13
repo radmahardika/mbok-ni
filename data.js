@@ -565,3 +565,87 @@ export function recentCouriers() {
   for (const c of src) if (c && !names.includes(c)) names.push(c);
   return names.slice(0, 4);
 }
+
+// ---------- Shopee ----------
+// Shopee dicatat seperti toko: stok diambil penjual Shopee lewat "titip", laku & setoran dari sheet Shopee.
+// Di sheet Shopee pecel tidak dicatat rasanya, jadi untuk Shopee pecel dihitung gabungan.
+export const SHOPEE_ID = 'shopee';
+export const PECEL_IDS = ['pedas', 'sedang', 'tidak'];
+export const isShopee = (storeId) => storeId === SHOPEE_ID;
+
+export function ensureShopeeStore() {
+  if (!storeById(SHOPEE_ID)) {
+    state.stores.push(touch({ id: SHOPEE_ID, name: 'Shopee', wa: '', address: 'Toko online', createdAt: now() }));
+    save();
+  }
+}
+
+// Bagi jumlah pecel laku ke tiap rasa sebanding stok yang ada (sisa pembagian ke stok terbesar).
+function allocatePecel(stock, qty) {
+  let base = Object.fromEntries(PECEL_IDS.map((id) => [id, stock[id] || 0]));
+  if (!sum(base)) {
+    // stok tidak tercatat: pakai perbandingan semua titipan ke Shopee, atau rata
+    base = Object.fromEntries(PECEL_IDS.map((id) => [id, 0]));
+    for (const n of state.notes) if (n.storeId === SHOPEE_ID && n.type === 'titip' && n.status === 'aktif') for (const id of PECEL_IDS) base[id] += n.items[id] || 0;
+    if (!sum(base)) base = { pedas: 1, sedang: 1, tidak: 1 };
+  }
+  const tot = sum(base);
+  const out = {};
+  let given = 0;
+  for (const id of PECEL_IDS) {
+    out[id] = Math.floor((qty * base[id]) / tot);
+    given += out[id];
+  }
+  const order = [...PECEL_IDS].sort((a, b) => base[b] - base[a]);
+  for (let i = 0; given < qty; i++, given++) out[order[i % 3]]++;
+  return out;
+}
+
+// Total yang sudah dicatat dari tab bulan tertentu (nota Shopee terakhir untuk bulan itu).
+export function shopeeImported(month) {
+  const n = notesNewestFirst().find((x) => x.status === 'aktif' && x.shopee && x.shopee.month === month);
+  return n ? n.shopee.totals : { pecel: 0, kacang: 0, setor: 0, lastDay: 0 };
+}
+
+export function shopeeStock() {
+  const st = stockAtStore(SHOPEE_ID);
+  return { pecel: PECEL_IDS.reduce((a, id) => a + (st[id] || 0), 0), kacang: st.kacang || 0 };
+}
+
+// data = hasil baca sheet; mencatat hanya tambahan sejak catatan sebelumnya.
+export function createShopeeNote(data, label) {
+  const before = shopeeImported(data.month);
+  const setor = data.setorPecel + data.setorKacang;
+  const delta = {
+    pecel: Math.max(0, data.pecel - before.pecel),
+    kacang: Math.max(0, data.kacang - before.kacang),
+    setor: Math.max(0, setor - before.setor),
+  };
+  const expected = stockAtStore(SHOPEE_ID);
+  const pec = allocatePecel(expected, delta.pecel);
+  const soldMap = { ...pec, kacang: delta.kacang };
+  const counted = {};
+  let short = 0;
+  for (const p of PRODUCTS) {
+    const e = expected[p.id] || 0;
+    counted[p.id] = Math.max(0, e - (soldMap[p.id] || 0));
+    short += Math.max(0, (soldMap[p.id] || 0) - e);
+  }
+  // expected disamakan dengan yang laku bila stok kurang, supaya laku tetap tercatat utuh
+  const exp = {};
+  for (const p of PRODUCTS) exp[p.id] = counted[p.id] + (soldMap[p.id] || 0);
+  const n = createCekNote({ storeId: SHOPEE_ID, expected: exp, counted, pulled: {}, receiver: '', amount: delta.setor || null, paid: 0 });
+  n.shopee = {
+    month: data.month,
+    label,
+    fromDay: before.lastDay ? before.lastDay : 1,
+    lastDay: data.lastDay,
+    pecel: delta.pecel,
+    kacang: delta.kacang,
+    short,
+    totals: { pecel: data.pecel, kacang: data.kacang, setor, lastDay: data.lastDay },
+  };
+  touch(n);
+  save();
+  return n;
+}

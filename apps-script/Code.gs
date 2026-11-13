@@ -19,6 +19,10 @@ var PRODUCTS = [
   { id: 'kacang', name: 'Bumbu Kacang' },
 ];
 var DATA_HEADERS = ['kind', 'id', 'updatedAt', 'stamp', 'json'];
+
+// ID Google Sheet "Mbokni Shopee" (bagian di antara /d/ dan /edit pada alamatnya).
+// Isi di sini saat memasang — jangan disimpan di repo publik.
+var SHOPEE_SHEET_ID = '';
 var PHOTO_FOLDER = 'Mbok Ni - Foto Nota';
 
 // Jalankan sekali dari editor: membuat tab dan kode rahasia.
@@ -54,6 +58,7 @@ function doPost(e) {
     if (req.action === 'sync') return out_(sync_(req));
     if (req.action === 'photo') return out_(savePhoto_(req));
     if (req.action === 'getPhoto') return out_(getPhoto_(req));
+    if (req.action === 'shopee') return out_(shopee_(req));
     return out_({ ok: false, error: 'Perintah tidak dikenal' });
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message ? err.message : err) });
@@ -277,4 +282,41 @@ function rebuildViews_(ss, records) {
   sheetFresh_(ss, 'Kiriman', ['Tanggal', 'Jam', 'Travel', 'No. HP', 'Catatan', 'Status'], schedules.map(function (s) {
     return [s.date, s.time || '', s.courier || '', s.phone || '', s.note || '', STATUS[s.status] || s.status];
   }), [1, 2, 4]);
+}
+
+// ---------- Penjualan Shopee ----------
+// Membaca tab bulanan (mis. "Nov26") dari sheet Mbokni Shopee:
+// kolom TGL | NAMA PELANGGAN | JUMLAH | KODE | NAMA PRODUK | SETOR/LABA | HARGA.
+// Kode "PC…" = Pecel (semua rasa), "GD…" = Gado-gado (Bumbu Kacang 200 g). Barang lain diabaikan.
+function num_(v) {
+  if (typeof v === 'number') return v;
+  return Number(String(v || '').replace(/[^\d-]/g, '')) || 0;
+}
+
+function shopee_(req) {
+  if (!SHOPEE_SHEET_ID) return { ok: false, error: 'ID sheet Shopee belum diisi di Apps Script' };
+  var tab = String(req.month || '');
+  var sh = SpreadsheetApp.openById(SHOPEE_SHEET_ID).getSheetByName(tab);
+  if (!sh) return { ok: false, error: 'Tab ' + tab + ' tidak ada di sheet Shopee' };
+  var values = sh.getDataRange().getValues();
+  var out = { ok: true, month: tab, title: String((values[1] || [])[0] || ''), pecel: 0, kacang: 0, setorPecel: 0, setorKacang: 0, lastDay: 0, rows: 0, days: {} };
+  var day = 0;
+  for (var i = 4; i < values.length; i++) {
+    var r = values[i];
+    if (String(r[0]).toUpperCase().indexOf('TOTAL') === 0) break;
+    if (r[0] !== '' && r[0] !== null) day = num_(r[0]) || day;
+    var qty = num_(r[2]);
+    if (!qty) continue;
+    var kode = String(r[3] || '').trim().toUpperCase();
+    var kind = kode.indexOf('PC') === 0 ? 'pecel' : kode.indexOf('GD') === 0 ? 'kacang' : null;
+    if (!kind) continue;
+    var setor = num_(r[6]) || qty * num_(r[5]);
+    out[kind] += qty;
+    out[kind === 'pecel' ? 'setorPecel' : 'setorKacang'] += setor;
+    out.rows++;
+    out.lastDay = Math.max(out.lastDay, day);
+    var d = (out.days[day] = out.days[day] || { pecel: 0, kacang: 0 });
+    d[kind] += qty;
+  }
+  return out;
 }

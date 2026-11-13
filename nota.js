@@ -58,6 +58,28 @@ export function notaDoc(n) {
       status: null,
     };
   }
+  if (n.type === 'cek' && n.shopee) {
+    const sh = n.shopee;
+    const rows = [];
+    if (sh.pecel) rows.push({ p: { name: 'Bumbu Pecel (semua rasa)', size: '100 g', color: '#e07b1f' }, qty: sh.pecel, sub: '100 g' });
+    if (sh.kacang) rows.push({ p: { name: 'Bumbu Kacang / Gado-gado', size: '200 g', color: '#7a4a1f' }, qty: sh.kacang, sub: '200 g' });
+    const qty = sh.pecel + sh.kacang;
+    const totals = [['Laku', `${qty} bungkus`]];
+    if (n.amount) totals.push(['Setoran', rupiah(n.amount)]);
+    const paid = paidOf(n);
+    if (paid) totals.push(['Dibayar', rupiah(paid)]);
+    const days = sh.fromDay && sh.fromDay !== sh.lastDay ? `tgl ${sh.fromDay}–${sh.lastDay}` : `tgl ${sh.lastDay}`;
+    return {
+      ...base,
+      title: 'Nota Pembayaran',
+      receiverLabel: 'Periode',
+      receiver: `${sh.label}, ${days}`,
+      sections: [{ title: 'Laku di Shopee', rows }],
+      empty: qty ? '' : 'Belum ada penjualan baru.',
+      totals,
+      status: payState(n),
+    };
+  }
   if (n.type === 'cek') {
     const sisa = {};
     for (const p of PRODUCTS) {

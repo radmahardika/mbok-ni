@@ -48,11 +48,17 @@ Dipakai Juragan (Android & iPhone), dibantu staf virtual **SANI**. Sani memanggi
 - Sheet berisi tab **Nota**, **Toko**, **Kiriman** yang mudah dibaca.
 - Uji tanpa Google: `node tests/mock-apps-script.mjs 8770`.
 
+## Tahap 6 — Pesanan Shopee (sudah)
+- Shopee dicatat **seperti toko**: stok yang diambil penjual Shopee = titip ke "Shopee".
+- **Ambil penjualan** dari sheet *Mbokni Shopee* (tab bulanan, mis. `Nov26`) lewat Apps Script; hanya tambahan sejak pengambilan terakhir yang dicatat (aman diulang, aman dari dua HP).
+- Pecel di sheet Shopee tidak ada rasanya → stok pecel Shopee dihitung **gabungan**; di catatan internal dibagi ke tiap rasa sebanding stok.
+- Setoran dari sheet jadi **Nota Pembayaran Shopee** (bisa dicatat lunas/sebagian), ikut Rekap & toko terlaris.
+
 ## Rencana
 1. ✅ Titip ke toko + nota
 2. ✅ Cek toko & pembayaran
 3. ✅ Stok & rekap, toko terlaris, saran titip
-4. Pesanan Shopee (dari Google Sheet pencatatan harian)
+4. ✅ Pesanan Shopee (dari Google Sheet pencatatan harian)
 5. ✅ Jadwal travel & pengingat
 + ✅ Sinkron data antar-HP (Google Sheet + Google Drive untuk foto)
 

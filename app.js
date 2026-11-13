@@ -157,6 +157,7 @@ const drafts = {
   cek: { storeId: null, counted: {}, pulled: {}, receiver: '', pay: null },
   datang: { items: {}, courier: '', scheduleId: null },
   rumah: {},
+  shopee: null, // hasil baca sheet Shopee yang sedang ditinjau
 };
 // Kunci isian stepper -> objek angka yang diubah.
 const qtyTarget = (key) =>
@@ -200,6 +201,8 @@ const routes = {
   jadwal: scheduleForm,
   'hitung-rumah': countHome,
   sambung: connectPage,
+  shopee: shopeePage,
+  'shopee-ambil': shopeeReview,
 };
 
 const HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
@@ -219,6 +222,7 @@ function reminders() {
     else if (d <= 1) out.push({ icon: '🚐', text: `<b>${whenText(sc)}</b> ada kiriman travel${via}.`, href: '#/datang' });
   }
   for (const s of D.activeStores()) {
+    if (D.isShopee(s.id)) continue;
     const old = D.oldItemsAtStore(s.id);
     const lastCek = D.lastNoteForStore(s.id, 'cek');
     const recentlyChecked = lastCek && D.daysSince(lastCek.createdAt) < 7; // sudah diputuskan saat cek
@@ -231,7 +235,7 @@ function reminders() {
     const s = D.storeById(n.storeId);
     out.push({ icon: '💰', text: `<b>${esc(s?.name)}</b> belum bayar <b>${rupiah(D.owedOf(n))}</b> (${n.no}).`, href: `#/nota?id=${n.id}` });
   }
-  const noPhoto = D.getState().notes.filter((n) => n.status === 'aktif' && !n.photos.length && n.type !== 'datang');
+  const noPhoto = D.getState().notes.filter((n) => n.status === 'aktif' && !n.photos.length && n.type !== 'datang' && !n.shopee);
   if (noPhoto.length) out.push({ icon: '📷', text: `<b>${noPhoto.length} nota</b> belum difoto nota kertasnya.`, href: '#/daftar-nota?foto=belum' });
   return out;
 }
@@ -256,7 +260,7 @@ function home() {
         <a class="tile yellow" href="#/cek-toko"><span class="ico">🔍</span><span>Cek Toko &amp; Pembayaran</span></a>
         <a class="tile" href="#/datang"><span class="ico">🚐</span><span>Barang Datang</span></a>
         <a class="tile" href="#/stok"><span class="ico">📊</span><span>Stok &amp; Rekap</span></a>
-        <button class="tile soon wide" data-act="soon" data-what="Pesanan Shopee"><span class="ico">🛒</span><span>Pesanan Shopee</span><small>Segera</small></button>
+        <a class="tile wide" href="#/shopee"><span class="ico">🛒</span><span>Pesanan Shopee</span></a>
       </nav>
       <div class="row2">
         <a class="btn big" href="#/daftar-nota">📄 Daftar Nota</a>
@@ -280,13 +284,13 @@ function syncLine() {
 
 // ----- Titip -----
 function titipStore() {
-  const stores = D.activeStores();
+  const stores = D.activeStores().sort((a, b) => D.isShopee(b.id) - D.isShopee(a.id));
   const list = stores
     .map((s) => {
       const last = D.lastNoteForStore(s.id, 'titip');
       const info = last ? `Terakhir titip ${tanggal(last.createdAt, false)}` : 'Belum pernah titip';
       return `<button class="pick" data-act="pick-store" data-id="${s.id}">
-          <b>${esc(s.name)}</b><small>${info}</small></button>`;
+          <b>${D.isShopee(s.id) ? '🛒 ' : ''}${esc(s.name)}</b><small>${D.isShopee(s.id) ? 'Stok untuk penjual Shopee · ' : ''}${info}</small></button>`;
     })
     .join('');
   return `
@@ -360,7 +364,7 @@ function titipCheck() {
         <ul class="sum">${sumList(dr.items)}</ul>
         <p class="sum-total">Jumlah <b>${sum} bungkus</b></p>
       </div>
-      ${receiverField(s.id, dr.receiver, 'Diterima oleh (petugas toko)', 'titip')}
+      ${receiverField(s.id, dr.receiver, D.isShopee(s.id) ? 'Diterima oleh (penjual Shopee)' : 'Diterima oleh (petugas toko)', 'titip')}
       <div class="stack">
         <button class="btn huge primary" data-act="create-titip">✔ Betul, buat nota</button>
         <a class="btn big ghost" href="#/jumlah">✏️ Ubah jumlah</a>
@@ -374,7 +378,7 @@ function cekStore(params) {
     startCek(params.pilih);
     return redirect('#/cek-hitung');
   }
-  const stores = D.activeStores();
+  const stores = D.activeStores().filter((s) => !D.isShopee(s.id));
   const list = stores
     .map((s) => {
       const stock = total(D.stockAtStore(s.id));
@@ -568,6 +572,8 @@ function notaDetail(params) {
   if (n.status === 'batal') {
     mood = 'khawatir';
     msg = `Nota ${n.no} ini sudah dibatalkan, ${sapa()}.`;
+  } else if (isNew && n.shopee) {
+    msg = `Penjualan Shopee sudah Sani catat di <b>${n.no}</b>, ${sapa()}. Setorannya <b>${rupiah(n.amount || 0)}</b> — ketuk <b>Catat pembayaran</b> kalau sudah disetor.`;
   } else if (isNew && n.type === 'datang') {
     msg = `Barang datang sudah Sani catat di <b>${n.no}</b>, ${sapa()}. Stok di rumah bertambah ${D.noteTotalQty(n)} bungkus. Kalau ada surat jalan dari travel, foto nggih.`;
   } else if (isNew) {
@@ -575,7 +581,7 @@ function notaDetail(params) {
   } else if (owed) {
     mood = 'ingat';
     msg = `${esc(s?.name)} masih kurang bayar <b>${rupiah(owed)}</b>, ${sapa()}.`;
-  } else if (!n.photos.length && n.type !== 'datang') {
+  } else if (!n.photos.length && n.type !== 'datang' && !n.shopee) {
     mood = 'ingat';
     msg = `Nota kertas untuk <b>${n.no}</b> belum difoto, ${sapa()}.`;
   } else {
@@ -593,12 +599,12 @@ function notaDetail(params) {
         active
           ? `<div class="stack">
         ${owed ? `<button class="btn huge primary" data-act="add-payment" data-id="${n.id}">💰 Catat pembayaran</button>` : ''}
-        ${n.type !== 'datang' ? `<button class="btn huge wa" data-act="send-wa" data-id="${n.id}">💬 Kirim ke WA ${s?.wa ? 'toko' : ''}</button>` : ''}
+        ${n.type !== 'datang' && !n.shopee ? `<button class="btn huge wa" data-act="send-wa" data-id="${n.id}">💬 Kirim ke WA ${s?.wa ? 'toko' : ''}</button>` : ''}
         <button class="btn big" data-act="share-img" data-id="${n.id}">🖼️ Kirim gambar nota</button>
         <label class="btn big">📷 ${n.type === 'datang' ? 'Foto surat jalan / nota travel' : 'Foto nota kertas'}
           <input type="file" accept="image/*" capture="environment" data-act="photo" data-id="${n.id}" hidden>
         </label>
-        ${refill && total(refill) && isNew ? `<button class="btn big yellow" data-act="refill" data-id="${n.id}">🏪 Titip lagi ke toko ini</button>` : ''}
+        ${refill && total(refill) && isNew && !n.shopee ? `<button class="btn big yellow" data-act="refill" data-id="${n.id}">🏪 Titip lagi ke toko ini</button>` : ''}
       </div>`
           : ''
       }
@@ -635,17 +641,17 @@ async function fillPhotos(n) {
 
 function notaList(params) {
   let notes = D.notesNewestFirst().filter((n) => !params.toko || n.storeId === params.toko);
-  if (params.foto === 'belum') notes = notes.filter((n) => n.status === 'aktif' && !n.photos.length && n.type !== 'datang');
+  if (params.foto === 'belum') notes = notes.filter((n) => n.status === 'aktif' && !n.photos.length && n.type !== 'datang' && !n.shopee);
   const list = notes
     .map((n) => {
       const s = D.storeById(n.storeId);
       const ps = payState(n);
-      const qty = n.type === 'cek' ? `laku ${total(n.sold)}` : `${D.noteTotalQty(n)} bks`;
+      const qty = n.type === 'cek' ? `laku ${n.shopee ? n.shopee.pecel + n.shopee.kacang : total(n.sold)}` : `${D.noteTotalQty(n)} bks`;
       const badges = [
         `<i class="b type">${{ cek: '💵 Pembayaran', titip: '🏪 Titip', datang: '🚐 Datang' }[n.type]}</i>`,
         n.status === 'batal' ? '<i class="b bad">Batal</i>' : '',
         n.status === 'aktif' && ps ? `<i class="b ${ps.tone}">${ps.text}</i>` : '',
-        n.status === 'aktif' && !n.photos.length && n.type !== 'datang' ? '<i class="b warn">📷 Belum foto</i>' : '',
+        n.status === 'aktif' && !n.photos.length && n.type !== 'datang' && !n.shopee ? '<i class="b warn">📷 Belum foto</i>' : '',
         n.status === 'aktif' && n.photos.length ? '<i class="b ok">📷 Ada foto</i>' : '',
         n.sentAt ? '<i class="b ok">✔ WA</i>' : '',
       ].join('');
@@ -979,6 +985,96 @@ function connectPage(params) {
     </main>`;
 }
 
+
+// ----- Shopee -----
+const BULAN_TAB = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
+const BULAN_PANJANG = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+function shopeeMonths() {
+  const d = new Date();
+  return [0, 1].map((back) => {
+    const m = new Date(d.getFullYear(), d.getMonth() - back, 1);
+    return { tab: `${BULAN_TAB[m.getMonth()]}${String(m.getFullYear()).slice(2)}`, label: `${BULAN_PANJANG[m.getMonth()]} ${m.getFullYear()}`, short: back ? 'Bulan lalu' : 'Bulan ini' };
+  });
+}
+
+function shopeePage() {
+  D.ensureShopeeStore();
+  const ss = D.shopeeStock();
+  const months = shopeeMonths();
+  const done = months.map((m) => ({ ...m, imp: D.shopeeImported(m.tab) }));
+  const owed = D.unpaidNotes().filter((n) => D.isShopee(n.storeId)).reduce((a, n) => a + D.owedOf(n), 0);
+  let msg = `Stok di penjual Shopee: <b>Pecel ${ss.pecel}</b> dan <b>Bumbu Kacang ${ss.kacang}</b> bungkus.`;
+  if (done[0].imp.lastDay) msg += ` Penjualan ${done[0].label} sudah Sani catat sampai <b>tanggal ${done[0].imp.lastDay}</b>.`;
+  if (owed) msg += ` Setoran yang belum dibayar <b>${rupiah(owed)}</b>.`;
+  const history = D.notesNewestFirst()
+    .filter((n) => D.isShopee(n.storeId))
+    .slice(0, 6)
+    .map((n) => {
+      const ps = payState(n);
+      const what = n.type === 'titip' ? `Titip ${D.noteTotalQty(n)} bks` : `Laku ${(n.shopee?.pecel || 0) + (n.shopee?.kacang || 0)} bks · ${n.shopee?.label || ''}`;
+      return `<a class="pick note-item ${n.status}" href="#/nota?id=${n.id}">
+        <span class="row-sb"><b>${n.no}</b><span>${tanggal(n.createdAt, false)}</span></span>
+        <span>${what}</span>
+        ${n.status === 'aktif' && ps ? `<span class="badges"><i class="b ${ps.tone}">${ps.text}</i></span>` : ''}</a>`;
+    })
+    .join('');
+  const sheetOk = S.isConfigured();
+  return `
+    ${topbar('Pesanan Shopee')}
+    <main class="page">
+      ${sani(owed ? 'ingat' : 'biasa', msg)}
+      ${
+        sheetOk
+          ? done
+              .map(
+                (m) => `<button class="btn huge ${m.short === 'Bulan ini' ? 'primary' : ''}" data-act="shopee-fetch" data-m="${m.tab}" data-label="${m.label}">
+                  📥 Ambil penjualan ${m.label}${m.imp.lastDay ? `<small class="btn-sub">sudah dicatat s.d. tgl ${m.imp.lastDay}</small>` : ''}</button>`
+              )
+              .join('')
+          : `<div class="card"><p>Untuk mengambil penjualan dari sheet Shopee, sambungkan <b>Google Sheet</b> dulu di Setelan.</p><a class="btn big" href="#/setelan">⚙️ Buka Setelan</a></div>`
+      }
+      <button class="btn big yellow" data-act="titip-shopee">🏪 Catat stok diambil penjual Shopee</button>
+      ${history ? `<h2 class="section-h">Catatan Shopee terakhir</h2><div class="stack">${history}</div>` : ''}
+      <p class="muted small">Pecel di sheet Shopee tidak dicatat rasanya, jadi stok pecel Shopee dihitung gabungan semua rasa.</p>
+    </main>`;
+}
+
+function shopeeReview() {
+  const r = drafts.shopee;
+  if (!r) return redirect('#/shopee');
+  const before = D.shopeeImported(r.data.month);
+  const setor = r.data.setorPecel + r.data.setorKacang;
+  const dp = Math.max(0, r.data.pecel - before.pecel);
+  const dk = Math.max(0, r.data.kacang - before.kacang);
+  const ds = Math.max(0, setor - before.setor);
+  const ss = D.shopeeStock();
+  const nothing = !dp && !dk;
+  let msg;
+  if (!r.data.rows) msg = `Di tab <b>${r.data.month}</b> belum ada penjualan, ${sapa()}.`;
+  else if (nothing) msg = `Penjualan ${r.label} sampai tanggal ${r.data.lastDay} sudah Sani catat semua, ${sapa()}. Tidak ada yang baru.`;
+  else msg = `Ada penjualan baru di Shopee: <b>Pecel ${dp}</b> dan <b>Bumbu Kacang ${dk}</b> bungkus, setoran <b>${rupiah(ds)}</b>. Sani catat nggih?`;
+  const warn = !nothing && (dp > ss.pecel || dk > ss.kacang)
+    ? `<p class="b warn">Laku lebih banyak dari stok Shopee yang tercatat (Pecel ${ss.pecel}, Bumbu Kacang ${ss.kacang}). Mungkin ada stok yang diambil tapi belum dicatat.</p>`
+    : '';
+  return `
+    ${topbar('Penjualan Shopee', '#/shopee')}
+    <main class="page">
+      ${sani(nothing ? 'biasa' : 'senang', msg)}
+      <div class="card">
+        <p class="muted">Sheet Shopee · ${esc(r.data.title || r.label)}${r.data.lastDay ? ` · sampai tgl ${r.data.lastDay}` : ''}</p>
+        <table class="tbl">
+          <tr><th></th><th>Di sheet</th><th>Sudah dicatat</th><th>Baru</th></tr>
+          <tr><td>Pecel</td><td>${r.data.pecel}</td><td>${before.pecel}</td><td><b>${dp}</b></td></tr>
+          <tr><td>Bumbu Kacang</td><td>${r.data.kacang}</td><td>${before.kacang}</td><td><b>${dk}</b></td></tr>
+        </table>
+        <p class="sum-total">Setoran baru <b>${rupiah(ds)}</b></p>
+        <p class="muted small">Total di sheet ${rupiah(setor)} · sudah dicatat ${rupiah(before.setor)}</p>
+        ${warn}
+      </div>
+      ${nothing ? '<a class="btn huge" href="#/shopee">‹ Kembali</a>' : `<button class="btn huge primary" data-act="shopee-save">✔ Catat penjualan Shopee</button>`}
+    </main>`;
+}
+
 // ----- Stok & rekap -----
 function tabs(active) {
   return `
@@ -1008,6 +1104,14 @@ function stockPage() {
     .map((s) => {
       const st = D.stockAtStore(s.id);
       for (const [k, v] of Object.entries(st)) all[k] = (all[k] || 0) + v;
+      if (D.isShopee(s.id)) {
+        const ss = D.shopeeStock();
+        return `<div class="card store-stock">
+          <div class="row-sb"><h2>🛒 Shopee</h2><b class="big-num">${ss.pecel + ss.kacang}</b></div>
+          <ul class="mini"><li style="--c:#e07b1f"><span>Pecel (semua rasa)</span><b>${ss.pecel}</b></li><li style="--c:#7a4a1f"><span>Bumbu Kacang</span><b>${ss.kacang}</b></li></ul>
+          <a class="btn big" href="#/shopee">🛒 Buka Pesanan Shopee</a>
+        </div>`;
+      }
       const old = D.oldItemsAtStore(s.id);
       const rows = D.PRODUCTS.map((p) => `<li style="--c:${p.color}"><span>${p.short}</span><b>${st[p.id] || 0}</b></li>`).join('');
       return `<div class="card store-stock">
@@ -1272,6 +1376,26 @@ $app.addEventListener('click', async (e) => {
   } else if (act === 'toggle-voice') {
     D.setSetting('voice', !D.getState().settings.voice);
     render();
+  } else if (act === 'shopee-fetch') {
+    toast('Membaca sheet Shopee…');
+    await S.syncNow(); // pastikan catatan dari HP lain sudah masuk, supaya tidak tercatat dobel
+    try {
+      const data = await S.fetchShopee(el.dataset.m);
+      drafts.shopee = { data, label: el.dataset.label };
+      location.hash = '#/shopee-ambil';
+    } catch (err) {
+      await confirmBox({ text: `Maaf, sheet Shopee belum bisa dibaca: ${esc(err.message)}.`, yes: 'Nggih', no: null });
+    }
+  } else if (act === 'shopee-save') {
+    const r = drafts.shopee;
+    const n = D.createShopeeNote(r.data, r.label);
+    drafts.shopee = null;
+    location.replace(`#/nota?id=${n.id}&baru=1`);
+  } else if (act === 'titip-shopee') {
+    D.ensureShopeeStore();
+    S.syncNow();
+    startTitip(D.SHOPEE_ID);
+    location.hash = '#/jumlah';
   } else if (act === 'start-datang') {
     S.syncNow();
     startDatang();
@@ -1503,7 +1627,7 @@ render();
 D.onChange(() => {
   if (D.dirtyRecords().length) S.syncSoon();
 });
-const SAFE_TO_REDRAW = ['', 'stok', 'rekap', 'daftar-nota', 'nota', 'datang'];
+const SAFE_TO_REDRAW = ['', 'stok', 'rekap', 'daftar-nota', 'nota', 'datang', 'shopee'];
 S.onSyncDone(async (r) => {
   const { path } = parse();
   if (r.renumbered && r.renumbered.length) {

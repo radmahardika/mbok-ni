@@ -277,3 +277,13 @@ h2 { font-size: 1.25rem; margin-bottom: 0.5rem; }
 .photo-wait { grid-column: 1 / -1; color: var(--brown-soft); }
 .mini li { gap: 0.5rem; }
 .mini li b { white-space: nowrap; }
+
+/* Shopee */
+.btn-sub { display: block; font-size: 0.8rem; font-weight: 600; opacity: 0.85; }
+.btn.huge:has(.btn-sub) { flex-direction: column; gap: 0.1rem; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+.tbl th { text-align: right; font-size: 0.8rem; color: var(--brown-soft); padding: 0.3rem 0.2rem; }
+.tbl td { text-align: right; padding: 0.5rem 0.2rem; border-top: 2px solid var(--line); white-space: nowrap; }
+.tbl td:first-child, .tbl th:first-child { text-align: left; white-space: normal; }
+.tbl { font-size: 0.85rem; table-layout: fixed; }
+.tbl th:first-child, .tbl td:first-child { width: 28%; }

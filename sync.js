@@ -125,3 +125,9 @@ export async function fetchPhoto(note, photoId) {
   await D.cachePhoto(photoId, blob);
   return blob;
 }
+
+// Baca penjualan satu tab bulan dari sheet Shopee (mis. "Nov26").
+export async function fetchShopee(month) {
+  if (!isConfigured()) throw new Error('Google Sheet belum tersambung');
+  return call({ action: 'shopee', month }, 60000);
+}

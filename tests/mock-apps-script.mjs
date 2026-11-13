@@ -48,10 +48,23 @@ const ss = {
   getSheetByName: (n) => sheets[n] || null,
   insertSheet: (n) => (sheets[n] = new Sheet(n)),
 };
+// Tiruan sheet "Mbokni Shopee": susunan sama dengan aslinya, isi buatan.
+const shopeeTabs = {};
+function shopeeTab(name, title, rows) {
+  const sh = new Sheet(name);
+  sh.rows = [['REKAP PENJUALAN MBOKNI'], [title], [], ['TGL', 'NAMA PELANGGAN', 'JUMLAH', 'KODE', 'NAMA PRODUK', 'SETOR/LABA', 'HARGA'], ...rows,
+    ['', '', '', 'GD NEW26c', 'Gado-gado', 11100, 0], ['TOTAL YANG HARUS DIBAYARKAN', '', '', '', '', '', 0]];
+  shopeeTabs[name] = sh;
+}
+const r = (tgl, qty, kode) => [tgl, 'Pelanggan', qty, kode, kode.startsWith('Pc') ? 'Pecel' : kode.startsWith('GD') ? 'Gado-gado' : 'Lain', kode.startsWith('Pc') ? 5550 : kode.startsWith('GD') ? 11100 : 5000, qty * (kode.startsWith('Pc') ? 5550 : kode.startsWith('GD') ? 11100 : 5000)];
+shopeeTab('Okt26', 'Periode Oktober 2026', [r(1, 2, 'GD NEW26c'), r('', 2, 'Pc NEW26c'), r(2, 1, 'Em'), r('', 5, 'Pc NEW26c'), r(15, 10, 'GD NEW26c')]);
+shopeeTab('Nov26', 'Periode November 2026', [r(1, 2, 'Pc NEW26c'), r('', 1, 'GD NEW26c'), r(2, 4, 'GD NEW26c'), r('', 6, 'Pc NEW26c'), r('', 1, 'Sp'), r(5, 2, 'GD NEW26c')]);
+export const addShopeeRow = (tab, row) => shopeeTabs[tab].rows.splice(shopeeTabs[tab].rows.length - 2, 0, row);
+
 const files = {};
 const props = {};
 const ctx = vm.createContext({
-  SpreadsheetApp: { getActiveSpreadsheet: () => ss },
+  SpreadsheetApp: { getActiveSpreadsheet: () => ss, openById: () => ({ getSheetByName: (n) => shopeeTabs[n] || null }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] ?? null, setProperty: (k, v) => (props[k] = v) }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
   ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (t) => ({ t, setMimeType() { return this; } }) },
@@ -71,6 +84,7 @@ const ctx = vm.createContext({
   Date, JSON, Math, Number, String, Object, Array, console,
 });
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'apps-script/Code.gs'), 'utf8'), ctx);
+vm.runInContext("SHOPEE_SHEET_ID = 'UJI'", ctx);
 const token = vm.runInContext('setup()', ctx);
 fs.writeFileSync(path.join(ROOT, 'tests', 'token.txt'), token);
 
@@ -87,6 +101,7 @@ http.createServer((req, res) => {
     });
     return;
   }
+  if (req.url.startsWith('/__shopee-add')) { const q = new URL(req.url, 'http://x').searchParams; addShopeeRow(q.get('tab'), r(Number(q.get('tgl')), Number(q.get('qty')), q.get('kode'))); res.end('ok'); return; }
   if (req.url === '/__sheets') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(Object.fromEntries(Object.entries(sheets).map(([k, v]) => [k, v.rows])))); return; }
   const f = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]) === '/' ? 'index.html' : decodeURIComponent(req.url.split('?')[0]));
   if (!f.startsWith(ROOT) || !fs.existsSync(f)) { res.writeHead(404); res.end(); return; }
