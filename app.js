@@ -1,6 +1,7 @@
 import { saniSVG } from './sani.js';
 import * as D from './data.js';
 import { notaDoc, notaText, waLink, notaImage, tanggal, jam, rupiah, payState } from './nota.js';
+import { PERIODS, period, topStores, rekapImage } from './rekap.js';
 
 const $app = document.getElementById('app');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -179,6 +180,8 @@ const routes = {
   'daftar-nota': notaList,
   toko: storeForm,
   setelan: settings,
+  stok: stockPage,
+  rekap: rekapPage,
 };
 
 // Pengingat untuk beranda, paling penting di atas.
@@ -220,7 +223,7 @@ function home() {
       <nav class="menu">
         <a class="tile primary" href="#/titip"><span class="ico">🏪</span><span>Titip ke Toko</span></a>
         <a class="tile yellow" href="#/cek-toko"><span class="ico">🔍</span><span>Cek Toko &amp; Pembayaran</span></a>
-        <button class="tile soon" data-act="soon" data-what="Stok dan rekap"><span class="ico">📊</span><span>Stok &amp; Rekap</span><small>Segera</small></button>
+        <a class="tile" href="#/stok"><span class="ico">📊</span><span>Stok &amp; Rekap</span></a>
         <button class="tile soon" data-act="soon" data-what="Pesanan Shopee"><span class="ico">🛒</span><span>Pesanan Shopee</span><small>Segera</small></button>
       </nav>
       <div class="row2">
@@ -256,14 +259,28 @@ function titipQty() {
   const s = D.storeById(dr.storeId);
   if (!s) return redirect('#/titip');
   const sum = total(dr.items);
-  const msg = dr.fromCek
-    ? `Titip lagi ke <b>${esc(s.name)}</b>. Sani sudah isi sesuai yang laku dan ditarik tadi — boleh diubah nggih, ${sapa()}.`
-    : `Titip ke <b>${esc(s.name)}</b>. Berapa bungkus masing-masing, ${sapa()}? Ketuk <b>+</b> untuk menambah.`;
+  const sug = D.suggestion(s.id);
+  const stock = D.stockAtStore(s.id);
+  let msg;
+  if (dr.fromCek) msg = `Titip lagi ke <b>${esc(s.name)}</b>. Sani sudah isi sesuai saran — boleh diubah nggih, ${sapa()}.`;
+  else if (sug && total(sug.qty)) msg = `Titip ke <b>${esc(s.name)}</b>. Sani punya saran jumlah dari penjualan sebelumnya — ketuk <b>Pakai saran Sani</b> kalau setuju.`;
+  else msg = `Titip ke <b>${esc(s.name)}</b>. Berapa bungkus masing-masing, ${sapa()}? Ketuk <b>+</b> untuk menambah.`;
+  const note = (p) => {
+    const parts = [];
+    if (stock[p.id]) parts.push(`Masih di toko: <b>${stock[p.id]}</b>`);
+    if (sug && sug.perWeek[p.id]) parts.push(`laku ±${sug.perWeek[p.id]}/minggu`);
+    if (sug) parts.push(`saran Sani: <b>${sug.qty[p.id] || 0}</b>`);
+    return parts.join(' · ');
+  };
+  const useBtn = sug && total(sug.qty) && !dr.fromCek
+    ? `<button class="btn big yellow" data-act="use-suggest">✨ Pakai saran Sani (${total(sug.qty)} bungkus)</button>`
+    : '';
   return `
     ${topbar('Jumlah Titipan', '#/titip')}
     <main class="page">
       ${sani('biasa', msg)}
-      <div class="stack">${D.PRODUCTS.map((p) => stepper(p, dr.items[p.id] || 0, 'titip', { plus10: true })).join('')}</div>
+      ${useBtn}
+      <div class="stack">${D.PRODUCTS.map((p) => stepper(p, dr.items[p.id] || 0, 'titip', { plus10: true, note: note(p) })).join('')}</div>
       <div class="sticky">
         <button class="btn huge primary" data-act="go" data-to="#/titip-cek" ${sum ? '' : 'disabled'}>Lanjut (${sum} bungkus) ›</button>
       </div>
@@ -676,6 +693,113 @@ function settings() {
     </main>`;
 }
 
+
+// ----- Stok & rekap -----
+function tabs(active) {
+  return `
+    <div class="row2 tabs">
+      <a class="btn big ${active === 'stok' ? 'primary' : ''}" href="#/stok">📦 Stok</a>
+      <a class="btn big ${active === 'rekap' ? 'primary' : ''}" href="#/rekap">📊 Rekap</a>
+    </div>`;
+}
+
+// Batang mendatar satu warna, angka di ujung batang.
+function bars(rows, unit = '') {
+  const max = Math.max(1, ...rows.map((r) => r.value));
+  return `<div class="bars">${rows
+    .map(
+      (r) => `<div class="bar-row">
+        <span class="bar-label">${r.dot ? `<i class="dot" style="background:${r.dot}"></i>` : ''}${r.label}</span>
+        <span class="bar-track"><span class="bar" style="width:${(r.value / max) * 100}%"></span><b>${r.value}${unit}</b></span>
+      </div>`
+    )
+    .join('')}</div>`;
+}
+
+function stockPage() {
+  const stores = D.activeStores();
+  const all = {};
+  const cards = stores
+    .map((s) => {
+      const st = D.stockAtStore(s.id);
+      for (const [k, v] of Object.entries(st)) all[k] = (all[k] || 0) + v;
+      const old = D.oldItemsAtStore(s.id);
+      const rows = D.PRODUCTS.map((p) => `<li style="--c:${p.color}"><span>${p.short}</span><b>${st[p.id] || 0}</b></li>`).join('');
+      return `<div class="card store-stock">
+        <div class="row-sb"><h2>${esc(s.name)}</h2><b class="big-num">${total(st)}</b></div>
+        ${old.length ? `<p class="b warn">⏰ Ada bumbu ${Math.max(...old.map((o) => o.days))} hari di toko</p>` : ''}
+        <ul class="mini">${rows}</ul>
+        <button class="btn big" data-act="pick-cek" data-id="${s.id}">🔍 Cek toko ini</button>
+      </div>`;
+    })
+    .join('');
+  const sum = total(all);
+  const msg = stores.length
+    ? `Menurut catatan Sani, ada <b>${sum} bungkus</b> di ${stores.length} toko, ${sapa()}.`
+    : `Belum ada toko yang dicatat, ${sapa()}.`;
+  return `
+    ${topbar('Stok &amp; Rekap')}
+    <main class="page">
+      ${tabs('stok')}
+      ${sani('biasa', msg)}
+      ${stores.length ? `<section class="card"><h2>Di semua toko</h2>${bars(D.PRODUCTS.map((p) => ({ label: p.short, dot: p.color, value: all[p.id] || 0 })))}</section>` : ''}
+      ${cards}
+      <p class="muted small">Stok di rumah akan tercatat nanti bersama fitur <b>Barang Datang</b> (travel) dan pesanan Shopee.</p>
+    </main>`;
+}
+
+function rekapPage(params) {
+  const pid = PERIODS.some((x) => x.id === params.p) ? params.p : 'minggu';
+  const per = period(pid);
+  const label = PERIODS.find((x) => x.id === pid).label;
+  const r = D.recap(per.from, per.to);
+  const sold = total(r.sold);
+  const titip = total(r.titip);
+  const pulled = total(r.pulled);
+  const stores = topStores(r);
+  const pills = PERIODS.map((x) => `<a class="btn ${x.id === pid ? 'primary' : ''}" href="#/rekap?p=${x.id}">${x.label}</a>`).join('');
+
+  let msg;
+  if (!sold && !titip && !r.received) msg = `${label} belum ada catatan titip atau cek toko, ${sapa()}.`;
+  else {
+    msg = `${label} laku <b>${sold} bungkus</b>, uang masuk <b>${rupiah(r.received)}</b>.`;
+    if (stores[0]) msg += ` Paling laris di <b>${esc(stores[0].name)}</b>.`;
+  }
+
+  const suggest = D.activeStores()
+    .map((s) => ({ s, sug: D.suggestion(s.id) }))
+    .filter((x) => x.sug && total(x.sug.qty))
+    .map(({ s, sug }) => {
+      const items = D.PRODUCTS.filter((p) => sug.qty[p.id]).map((p) => `${p.short} <b>${sug.qty[p.id]}</b>`).join(', ');
+      return `<div class="sug">
+        <p><b>${esc(s.name)}</b><br>${items}<br><small>kira-kira cukup untuk ${sug.interval} hari</small></p>
+        <button class="btn big yellow" data-act="titip-suggest" data-id="${s.id}">🏪 Titip sesuai saran</button>
+      </div>`;
+    })
+    .join('');
+
+  return `
+    ${topbar('Stok &amp; Rekap')}
+    <main class="page">
+      ${tabs('rekap')}
+      <div class="pills">${pills}</div>
+      <p class="muted center">${per.title}</p>
+      ${sani(sold ? 'senang' : 'biasa', msg)}
+      <div class="stats">
+        <div class="stat"><small>Laku</small><b>${sold}</b><span>bungkus</span></div>
+        <div class="stat"><small>Uang masuk</small><b class="money">${rupiah(r.received)}</b></div>
+        <div class="stat"><small>Dititip</small><b>${titip}</b><span>bungkus</span></div>
+        <div class="stat ${r.owed ? 'warn' : ''}"><small>Belum dibayar</small><b class="money">${rupiah(r.owed)}</b><span>semua toko</span></div>
+      </div>
+      ${r.salesUnknown ? `<p class="muted small">${r.salesUnknown} bungkus laku belum dihitung uangnya karena harga titip belum diisi di Setelan.</p>` : ''}
+      <section class="card"><h2>Laku per produk</h2>${bars(D.PRODUCTS.map((p) => ({ label: p.short, dot: p.color, value: r.sold[p.id] || 0 })))}
+        ${pulled ? `<p class="muted">Ditarik: <b>${pulled} bungkus</b></p>` : ''}</section>
+      ${stores.length ? `<section class="card"><h2>Toko terlaris</h2>${bars(stores.map((x, i) => ({ label: `${i + 1}. ${esc(x.name)}`, value: x.qty })))}</section>` : ''}
+      ${suggest ? `<section class="card"><h2>Saran titip dari Sani</h2><div class="stack">${suggest}</div></section>` : ''}
+      <button class="btn huge wa" data-act="share-rekap" data-p="${pid}">🖼️ Kirim rekap (gambar)</button>
+    </main>`;
+}
+
 // ---------- Router ----------
 function parse() {
   const [path, q] = location.hash.replace(/^#\/?/, '').split('?');
@@ -809,8 +933,12 @@ $app.addEventListener('click', async (e) => {
     }
   } else if (act === 'refill') {
     const n = D.noteById(id);
-    const items = { ...n.sold };
-    for (const [k, v] of Object.entries(n.pulled)) items[k] = (items[k] || 0) + v;
+    const sug = D.suggestion(n.storeId);
+    let items = sug ? sug.qty : {};
+    if (!total(items)) {
+      items = { ...n.sold };
+      for (const [k, v] of Object.entries(n.pulled)) items[k] = (items[k] || 0) + v;
+    }
     startTitip(n.storeId, items);
     drafts.titip.fromCek = true;
     location.hash = '#/jumlah';
@@ -851,6 +979,26 @@ $app.addEventListener('click', async (e) => {
   } else if (act === 'toggle-voice') {
     D.setSetting('voice', !D.getState().settings.voice);
     render();
+  } else if (act === 'use-suggest') {
+    drafts.titip.items = { ...D.suggestion(drafts.titip.storeId).qty };
+    render();
+  } else if (act === 'titip-suggest') {
+    startTitip(id, D.suggestion(id)?.qty || {});
+    drafts.titip.fromCek = true;
+    location.hash = '#/jumlah';
+  } else if (act === 'share-rekap') {
+    const pid = el.dataset.p;
+    const per = period(pid);
+    const label = PERIODS.find((x) => x.id === pid).label;
+    const blob = await rekapImage(D.recap(per.from, per.to), per, label);
+    const file = new File([blob], `rekap-mbokni-${pid}.png`, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file] });
+      } catch {
+        /* dibatalkan */
+      }
+    } else download(blob, file.name);
   } else if (act === 'backup') {
     await backup();
   }

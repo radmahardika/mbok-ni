@@ -237,3 +237,32 @@ h2 { font-size: 1.25rem; margin-bottom: 0.5rem; }
 /* Isian angka besar */
 .num-wrap { display: flex; align-items: center; gap: 0.5rem; font-size: 1.4rem; font-weight: 800; }
 .num-input { font-size: 2rem; font-weight: 900; text-align: center; min-height: 80px; }
+
+/* Stok & rekap */
+.tabs .btn { min-height: 56px; }
+.pills { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+.pills .btn { font-size: 0.85rem; padding: 0.25rem; min-height: 56px; }
+.center { text-align: center; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.stat {
+  background: var(--card); border: 3px solid var(--line); border-radius: 16px; padding: 0.75rem;
+  display: flex; flex-direction: column; gap: 0.1rem;
+}
+.stat small { color: var(--brown-soft); font-weight: 700; }
+.stat b { font-size: 1.5rem; line-height: 1.15; word-break: break-word; }
+.stat span { color: var(--brown-soft); font-size: 0.8rem; }
+.stat.warn { border-color: #e2b93b; background: #fff6d6; }
+.bars { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem; }
+.bar-row { display: grid; grid-template-columns: minmax(7rem, 42%) 1fr; gap: 0.5rem; align-items: center; }
+.bar-label { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; font-size: 0.95rem; }
+.dot { width: 14px; height: 14px; border-radius: 50%; flex: 0 0 14px; }
+.bar-track { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
+.bar { display: block; height: 22px; background: #3f7f20; border-radius: 0 4px 4px 0; min-width: 0; }
+.bar-track b { font-size: 1.05rem; white-space: nowrap; }
+.big-num { font-size: 1.8rem; }
+.mini { list-style: none; padding: 0; margin: 0.5rem 0 0.75rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 1rem; }
+.mini li { display: flex; justify-content: space-between; border-left: 6px solid var(--c); padding-left: 0.5rem; }
+.store-stock .b { display: inline-block; margin: 0.25rem 0; }
+.sug { border-top: 2px solid var(--line); padding-top: 0.75rem; }
+.sug p { margin: 0 0 0.5rem; }
+.stat b.money { font-size: 1.2rem; white-space: nowrap; }

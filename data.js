@@ -305,3 +305,56 @@ export async function compressPhoto(file) {
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   return new Promise((r) => c.toBlob((b) => r(b || file), 'image/jpeg', 0.75));
 }
+
+// ---------- Rekap ----------
+const inRange = (iso, from, to) => iso >= from.toISOString() && iso < to.toISOString();
+
+export function recap(from, to) {
+  const out = { titip: {}, sold: {}, pulled: {}, sales: 0, salesUnknown: 0, received: 0, byStore: {}, ceks: 0 };
+  const add = (map, pid, q) => (map[pid] = (map[pid] || 0) + q);
+  for (const n of state.notes) {
+    if (n.status !== 'aktif') continue;
+    // uang masuk dihitung dari tanggal bayar, bukan tanggal nota
+    for (const p of n.payments || []) if (inRange(p.at, from, to)) out.received += p.amount;
+    if (!inRange(n.createdAt, from, to)) continue;
+    if (n.type === 'titip') {
+      for (const [pid, q] of Object.entries(n.items)) add(out.titip, pid, q);
+    } else if (n.type === 'cek') {
+      out.ceks++;
+      const soldQty = sum(n.sold);
+      for (const [pid, q] of Object.entries(n.sold)) add(out.sold, pid, q);
+      for (const [pid, q] of Object.entries(n.pulled)) if (q) add(out.pulled, pid, q);
+      if (soldQty) {
+        if (n.amount != null) out.sales += n.amount;
+        else out.salesUnknown += soldQty;
+      }
+      out.byStore[n.storeId] = (out.byStore[n.storeId] || 0) + soldQty;
+    }
+  }
+  out.owed = unpaidNotes().reduce((a, n) => a + owedOf(n), 0);
+  return out;
+}
+
+// Kecepatan laku per toko dari (maksimal) 4 cek terakhir, dan saran titip.
+// Saran = perkiraan laku sampai kunjungan berikutnya + 20% cadangan − stok yang masih di toko.
+export function suggestion(storeId) {
+  const ceks = notesOldestFirst().filter((n) => n.storeId === storeId && n.status === 'aktif' && n.type === 'cek');
+  if (!ceks.length) return null;
+  const win = ceks.slice(-4);
+  const before = ceks[ceks.length - win.length - 1];
+  const firstTitip = notesOldestFirst().find((n) => n.storeId === storeId && n.status === 'aktif' && n.type === 'titip');
+  const startIso = before ? before.createdAt : firstTitip ? firstTitip.createdAt : win[0].createdAt;
+  const days = Math.max(1, (new Date(win[win.length - 1].createdAt) - new Date(startIso)) / DAY);
+  const interval = Math.min(30, Math.max(7, days / win.length)); // jarak kunjungan rata-rata
+  const stock = stockAtStore(storeId);
+  const perWeek = {};
+  const qty = {};
+  for (const p of PRODUCTS) {
+    const sold = win.reduce((a, n) => a + (n.sold[p.id] || 0), 0);
+    const perDay = sold / days;
+    perWeek[p.id] = Math.round(perDay * 7);
+    const need = Math.ceil(perDay * interval * 1.2) - (stock[p.id] || 0);
+    if (need > 0) qty[p.id] = need;
+  }
+  return { perWeek, qty, interval: Math.round(interval) };
+}

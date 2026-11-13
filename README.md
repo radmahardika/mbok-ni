@@ -27,10 +27,17 @@ Dipakai Juragan (Android & iPhone), dibantu staf virtual **SANI**. Sani memanggi
 - Setelah cek, tombol **Titip lagi ke toko ini** mengisi otomatis sejumlah yang laku + ditarik.
 - Setiap nota mencatat **nama petugas toko** (penerima), dengan pilihan cepat nama yang pernah dipakai.
 
+## Tahap 3 — Stok & Rekap (sudah)
+- **Stok**: jumlah bumbu di semua toko (per produk) dan per toko, dengan tanda ⏰ barang lama dan tombol *Cek toko ini*.
+- **Rekap** Minggu ini / Bulan ini / Bulan lalu: laku, uang masuk (menurut tanggal bayar), dititip, belum dibayar, laku per produk, **toko terlaris**.
+- **Saran titip**: dari kecepatan laku (maks. 4 cek terakhir) × jarak kunjungan rata-rata + 20% cadangan − stok di toko. Muncul di Rekap dan di layar Jumlah Titipan (*Pakai saran Sani*).
+- **Kirim rekap** sebagai gambar sederhana ke WA.
+- Stok di rumah belum dicatat (menunggu Barang Datang/travel & Shopee).
+
 ## Rencana
 1. ✅ Titip ke toko + nota
 2. ✅ Cek toko & pembayaran
-3. Stok & rekap (rekap dalam bentuk gambar sederhana), toko terlaris, saran titip
+3. ✅ Stok & rekap, toko terlaris, saran titip
 4. Pesanan Shopee (dari Google Sheet pencatatan harian)
 5. Jadwal travel & pengingat
 + Sinkron data antar-HP (rencana: Google Sheet + Google Drive untuk foto)
