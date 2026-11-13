@@ -7,16 +7,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const buzz = () => navigator.vibrate && navigator.vibrate(15);
 const total = (obj) => Object.values(obj || {}).reduce((a, b) => a + b, 0);
 
-// Sapaan sesuai pengguna: "Pak" / "Bu".
-const sapa = () => (D.getState().user === 'Ibu' ? 'Bu' : 'Pak');
-
-function salam() {
-  const h = new Date().getHours();
-  if (h < 11) return 'Sugeng enjang';
-  if (h < 15) return 'Sugeng siang';
-  if (h < 18) return 'Sugeng sonten';
-  return 'Sugeng dalu';
-}
+// Sani memanggil pemilik dengan "Juragan".
+const sapa = () => 'Juragan';
 
 // ---------- Komponen ----------
 function sani(mood, text) {
@@ -176,7 +168,6 @@ function startCek(storeId) {
 // ---------- Halaman ----------
 const routes = {
   '': home,
-  pengguna: chooseUser,
   titip: titipStore,
   jumlah: titipQty,
   'titip-cek': titipCheck,
@@ -189,17 +180,6 @@ const routes = {
   toko: storeForm,
   setelan: settings,
 };
-
-function chooseUser() {
-  return `
-    <main class="page">
-      ${sani('senang', 'Sugeng rawuh! Sani di sini, <b>Staf Andalan Mbok Ni</b>. Ini HP siapa nggih?')}
-      <div class="stack">
-        <button class="btn huge primary" data-act="user" data-user="Bapak">👨 Saya Bapak</button>
-        <button class="btn huge primary" data-act="user" data-user="Ibu">👩 Saya Ibu</button>
-      </div>
-    </main>`;
-}
 
 // Pengingat untuk beranda, paling penting di atas.
 function reminders() {
@@ -223,20 +203,12 @@ function reminders() {
 }
 
 function home() {
-  const st = D.getState();
-  if (!st.user) return chooseUser();
-  const stores = D.activeStores();
   const rem = reminders();
-  let msg;
-  let mood = 'senang';
-  if (!stores.length) {
-    msg = `${salam()}, ${sapa()}! Belum ada toko yang dicatat. Ketuk <b>Titip ke Toko</b>, nanti Sani bantu tambahkan tokonya.`;
-  } else if (rem.length) {
-    mood = 'ingat';
-    msg = `${salam()}, ${sapa()}! Ada <b>${rem.length} hal</b> yang perlu diperhatikan hari ini.`;
-  } else {
-    msg = `${salam()}, ${sapa()}! Semua beres. Mau titip atau cek toko hari ini?`;
+  if (!D.activeStores().length) {
+    rem.unshift({ icon: '👋', text: 'Belum ada toko yang dicatat. Ketuk di sini untuk mulai <b>titip ke toko</b>.', href: '#/titip' });
   }
+  const msg = 'Halo Juragan, saya <b>SANI</b> - Staf Andalan Mbok Ni. Apa yang bisa saya bantu?';
+  const mood = rem.length ? 'ingat' : 'senang';
   const remList = rem
     .slice(0, 4)
     .map((r) => `<a class="remind" href="${r.href}"><span class="ico">${r.icon}</span><span>${r.text}</span><span class="go">›</span></a>`)
@@ -247,7 +219,7 @@ function home() {
       ${remList ? `<div class="stack">${remList}</div>` : ''}
       <nav class="menu">
         <a class="tile primary" href="#/titip"><span class="ico">🏪</span><span>Titip ke Toko</span></a>
-        <a class="tile yellow" href="#/cek-toko"><span class="ico">🔍</span><span>Cek Toko &amp; Tagih</span></a>
+        <a class="tile yellow" href="#/cek-toko"><span class="ico">🔍</span><span>Cek Toko &amp; Pembayaran</span></a>
         <button class="tile soon" data-act="soon" data-what="Stok dan rekap"><span class="ico">📊</span><span>Stok &amp; Rekap</span><small>Segera</small></button>
         <button class="tile soon" data-act="soon" data-what="Pesanan Shopee"><span class="ico">🛒</span><span>Pesanan Shopee</span><small>Segera</small></button>
       </nav>
@@ -255,7 +227,6 @@ function home() {
         <a class="btn big" href="#/daftar-nota">📄 Daftar Nota</a>
         <a class="btn big" href="#/setelan">⚙️ Setelan</a>
       </div>
-      <p class="whoami">Dipakai oleh: <b>${st.user}</b></p>
     </main>`;
 }
 
@@ -333,7 +304,7 @@ function titipCheck() {
     </main>`;
 }
 
-// ----- Cek toko & tagih -----
+// ----- Cek toko & pembayaran -----
 function cekStore(params) {
   if (params.pilih && D.storeById(params.pilih)) {
     startCek(params.pilih);
@@ -357,9 +328,9 @@ function cekStore(params) {
     })
     .join('');
   return `
-    ${topbar('Cek Toko &amp; Tagih')}
+    ${topbar('Cek Toko &amp; Bayar')}
     <main class="page">
-      ${sani('biasa', stores.length ? `Mau cek toko mana, ${sapa()}? Nanti Sani bantu hitung yang laku dan tagihannya.` : `Belum ada toko, ${sapa()}. Titip barang dulu nggih.`)}
+      ${sani('biasa', stores.length ? `Mau cek toko mana, ${sapa()}? Nanti Sani bantu hitung yang laku dan pembayarannya.` : `Belum ada toko, ${sapa()}. Titip barang dulu nggih.`)}
       <div class="stack">${list}</div>
     </main>`;
 }
@@ -443,7 +414,7 @@ function cekPay() {
   const { sold, extra, sisa, bill } = cekCalc();
   const soldQty = total(sold);
   const parts = [];
-  if (soldQty) parts.push(`Yang laku <b>${soldQty} bungkus</b>${bill != null ? `, tagihannya <b>${rupiah(bill)}</b>` : ''}.`);
+  if (soldQty) parts.push(`Yang laku <b>${soldQty} bungkus</b>${bill != null ? `, totalnya <b>${rupiah(bill)}</b>` : ''}.`);
   else parts.push('Belum ada yang laku.');
   if (total(dr.pulled)) parts.push(`Ditarik ${total(dr.pulled)} bungkus.`);
   if (total(extra)) parts.push(`Di rak ada <b>lebih ${total(extra)}</b> dari catatan Sani — Sani ikuti hitungan ${sapa()}.`);
@@ -455,7 +426,7 @@ function cekPay() {
     pay = `
       <div class="card">
         <h2>Pembayaran</h2>
-        <p class="sum-total">Tagihan <b>${rupiah(bill)}</b></p>
+        <p class="sum-total">Total <b>${rupiah(bill)}</b></p>
         <div class="stack">
           ${opt('lunas', `💵 Sudah dibayar lunas`)}
           ${opt('sebagian', dr.pay?.mode === 'sebagian' ? `💵 Dibayar ${rupiah(dr.pay.amount)} (ketuk untuk ubah)` : '💵 Dibayar sebagian…')}
@@ -466,7 +437,7 @@ function cekPay() {
     pay = `
       <div class="card">
         <h2>Pembayaran</h2>
-        <p class="muted">Harga titip belum diisi di Setelan, jadi Sani belum bisa menghitung tagihan.</p>
+        <p class="muted">Harga titip belum diisi di Setelan, jadi Sani belum bisa menghitung totalnya.</p>
         <div class="stack">
           <button class="btn big ${dr.pay?.mode === 'manual' ? 'primary' : ''}" data-act="pay-mode" data-mode="manual">${dr.pay?.mode === 'manual' ? `💵 Uang diterima ${rupiah(dr.pay.amount)}` : '💵 Isi uang yang diterima'}</button>
           <button class="btn big ${dr.pay?.mode === 'belum' ? 'primary' : ''}" data-act="pay-mode" data-mode="belum">⏳ Belum dibayar</button>
@@ -516,7 +487,7 @@ function notaPreview(n) {
         ${d.empty ? `<p>${d.empty}</p>` : ''}
         ${d.totals.map(([k, v]) => `<p class="sum-total">${k} <b>${v}</b></p>`).join('')}
         ${d.status ? `<p class="pay-pill ${d.status.tone}">${d.status.text}</p>` : ''}
-        <p class="muted small">Dicatat ${n.createdBy || ''} · ${jam(n.createdAt)}${n.sentAt ? ' · ✔ sudah dikirim ke WA' : ''}</p>
+        <p class="muted small">Dicatat jam ${jam(n.createdAt)}${n.sentAt ? ' · ✔ sudah dikirim ke WA' : ''}</p>
       </div>
       ${n.status === 'batal' ? '<div class="stamp">DIBATALKAN</div>' : ''}
     </div>`;
@@ -597,7 +568,7 @@ function notaList(params) {
       const ps = payState(n);
       const qty = n.type === 'cek' ? `laku ${total(n.sold)}` : `${D.noteTotalQty(n)} bks`;
       const badges = [
-        `<i class="b type">${n.type === 'cek' ? '🔍 Tagihan' : '🏪 Titip'}</i>`,
+        `<i class="b type">${n.type === 'cek' ? '💵 Pembayaran' : '🏪 Titip'}</i>`,
         n.status === 'batal' ? '<i class="b bad">Batal</i>' : '',
         n.status === 'aktif' && ps ? `<i class="b ${ps.tone}">${ps.text}</i>` : '',
         n.status === 'aktif' && !n.photos.length ? '<i class="b warn">📷 Belum foto</i>' : '',
@@ -607,7 +578,7 @@ function notaList(params) {
       return `<a class="pick note-item ${n.status}" href="#/nota?id=${n.id}">
         <span class="row-sb"><b>${n.no}</b><span>${qty}</span></span>
         <span>${esc(s?.name)}${n.receiver ? ` · ${esc(n.receiver)}` : ''}</span>
-        <small>${tanggal(n.createdAt)} · ${n.createdBy || ''}</small>
+        <small>${tanggal(n.createdAt)}</small>
         <span class="badges">${badges}</span></a>`;
     })
     .join('');
@@ -672,7 +643,7 @@ function settings() {
       </section>
       <section class="card">
         <h2>Harga titip per bungkus</h2>
-        <p class="muted">Dipakai untuk menghitung nilai nota dan tagihan. Boleh dikosongkan.</p>
+        <p class="muted">Dipakai untuk menghitung nilai nota titip dan nota pembayaran. Boleh dikosongkan.</p>
         <div class="stack">${prices}</div>
       </section>
       <section class="card">
@@ -691,11 +662,6 @@ function settings() {
       <section class="card">
         <h2>Suara Sani</h2>
         <button class="btn big" data-act="toggle-voice">${st.settings.voice ? '🔊 Tombol bacakan: Nyala' : '🔇 Tombol bacakan: Mati'}</button>
-      </section>
-      <section class="card">
-        <h2>Pengguna HP ini</h2>
-        <p>Sekarang: <b>${st.user}</b></p>
-        <button class="btn big" data-act="switch-user">Ganti ke ${st.user === 'Bapak' ? 'Ibu' : 'Bapak'}</button>
       </section>
       <section class="card">
         <h2>Cadangan data</h2>
@@ -764,9 +730,6 @@ $app.addEventListener('click', async (e) => {
     speak(el.closest('.bubble').querySelector('p').textContent);
   } else if (act === 'go') {
     location.hash = el.dataset.to;
-  } else if (act === 'user') {
-    D.setUser(el.dataset.user);
-    render();
   } else if (act === 'soon') {
     await confirmBox({ mood: 'ingat', text: `${el.dataset.what} masih Sani siapkan nggih, ${sapa()}. Sabar sebentar.`, yes: 'Nggih', no: null });
   } else if (act === 'pick-store') {
@@ -807,7 +770,7 @@ $app.addEventListener('click', async (e) => {
     const { bill } = cekCalc();
     if (mode === 'sebagian' || mode === 'manual') {
       const v = await numberBox({
-        text: mode === 'manual' ? `Berapa uang yang diterima dari toko, ${sapa()}?` : `Dibayar berapa, ${sapa()}? Tagihannya ${rupiah(bill)}.`,
+        text: mode === 'manual' ? `Berapa uang yang diterima dari toko, ${sapa()}?` : `Dibayar berapa, ${sapa()}? Totalnya ${rupiah(bill)}.`,
         value: drafts.cek.pay?.amount || '',
         unit: 'Rp',
       });
@@ -822,7 +785,7 @@ $app.addEventListener('click', async (e) => {
     const dr = drafts.cek;
     const { expected, sold, bill } = cekCalc();
     if (total(sold) && !dr.pay) {
-      await confirmBox({ mood: 'khawatir', text: `Tagihannya sudah dibayar atau belum, ${sapa()}? Pilih dulu di bagian <b>Pembayaran</b> nggih.`, yes: 'Nggih', no: null });
+      await confirmBox({ mood: 'khawatir', text: `Sudah dibayar atau belum, ${sapa()}? Pilih dulu di bagian <b>Pembayaran</b> nggih.`, yes: 'Nggih', no: null });
       return;
     }
     if (!(await needReceiver(dr))) return;
@@ -888,12 +851,6 @@ $app.addEventListener('click', async (e) => {
   } else if (act === 'toggle-voice') {
     D.setSetting('voice', !D.getState().settings.voice);
     render();
-  } else if (act === 'switch-user') {
-    const to = D.getState().user === 'Bapak' ? 'Ibu' : 'Bapak';
-    if (await confirmBox({ mood: 'biasa', text: `Ganti pengguna HP ini ke <b>${to}</b>?`, yes: 'Ya, ganti', no: 'Tidak' })) {
-      D.setUser(to);
-      render();
-    }
   } else if (act === 'backup') {
     await backup();
   }

@@ -1,4 +1,4 @@
-// Nota titip & nota tagihan: satu susunan isi, dipakai untuk teks WhatsApp,
+// Nota titip & nota pembayaran: satu susunan isi, dipakai untuk teks WhatsApp,
 // gambar nota, dan tampilan di aplikasi.
 import { PRODUCTS, storeById, noteTotalQty, noteTotalMoney, paidOf } from './data.js';
 
@@ -28,7 +28,7 @@ const rowsOf = (qtyMap, prices) =>
 export function payState(n) {
   if (n.type !== 'cek') return null;
   const sold = Object.values(n.sold).reduce((a, b) => a + b, 0);
-  if (!sold) return { text: 'Tidak ada tagihan', tone: 'ok' };
+  if (!sold) return { text: 'Tidak ada yang perlu dibayar', tone: 'ok' };
   if (n.amount == null) return { text: 'Belum dibayar', tone: 'warn' };
   const paid = paidOf(n);
   if (paid >= n.amount) return { text: 'LUNAS', tone: 'ok' };
@@ -54,12 +54,12 @@ export function notaDoc(n) {
     const soldQty = Object.values(n.sold).reduce((a, b) => a + b, 0);
     const pulledQty = Object.values(n.pulled).reduce((a, b) => a + b, 0);
     const totals = [['Laku', `${soldQty} bungkus`]];
-    if (n.amount != null && soldQty) totals.push(['Tagihan', rupiah(n.amount)]);
+    if (n.amount != null && soldQty) totals.push(['Total', rupiah(n.amount)]);
     const paid = paidOf(n);
     if (paid) totals.push(['Dibayar', rupiah(paid)]);
     return {
       ...base,
-      title: 'Nota Tagihan',
+      title: 'Nota Pembayaran',
       receiverLabel: 'Petugas toko',
       sections: [
         { title: 'Laku', rows: rowsOf(n.sold, n.prices) },

@@ -15,7 +15,6 @@ export const productById = (id) => PRODUCTS.find((p) => p.id === id);
 
 const EMPTY = {
   version: 1,
-  user: null, // 'Bapak' | 'Ibu'
   counter: 0, // nomor nota terakhir
   stores: [],
   prices: {}, // harga titip per produk (opsional)
@@ -49,11 +48,6 @@ export const daysSince = (iso) => Math.floor((Date.now() - new Date(iso).getTime
 
 export const getState = () => state;
 
-export function setUser(user) {
-  state.user = user;
-  save();
-}
-
 export function setSetting(key, value) {
   state.settings[key] = value;
   save();
@@ -76,7 +70,7 @@ export function saveStore({ id, name, wa, address }) {
     Object.assign(storeById(id), clean);
   } else {
     id = uid();
-    state.stores.push({ id, ...clean, createdAt: now(), createdBy: state.user });
+    state.stores.push({ id, ...clean, createdAt: now() });
   }
   save();
   return id;
@@ -121,7 +115,6 @@ function addNote(fields) {
     photos: [],
     prices: { ...state.prices }, // harga saat nota dibuat
     createdAt: now(),
-    createdBy: state.user,
     updatedAt: now(),
     ...fields,
   };
@@ -141,7 +134,7 @@ export function createCekNote({ storeId, expected, counted, pulled, receiver, am
     const s = Math.max(0, (expected[p.id] || 0) - (counted[p.id] || 0));
     if (s) sold[p.id] = s;
   }
-  const payments = paid > 0 ? [{ at: now(), amount: paid, by: state.user }] : [];
+  const payments = paid > 0 ? [{ at: now(), amount: paid }] : [];
   return addNote({
     type: 'cek',
     storeId,
@@ -150,7 +143,7 @@ export function createCekNote({ storeId, expected, counted, pulled, receiver, am
     pulled: { ...pulled },
     sold,
     receiver: receiver.trim(),
-    amount, // tagihan (Rp) atau null bila harga belum ada dan tidak ada uang
+    amount, // total yang harus dibayar (Rp) atau null bila harga belum ada dan tidak ada uang
     payments,
   });
 }
@@ -170,7 +163,7 @@ export const owedOf = (n) => (n.type === 'cek' && n.status === 'aktif' && n.amou
 
 export function addPayment(id, amount) {
   const n = noteById(id);
-  n.payments = [...(n.payments || []), { at: now(), amount, by: state.user }];
+  n.payments = [...(n.payments || []), { at: now(), amount }];
   n.updatedAt = now();
   save();
 }
@@ -183,7 +176,6 @@ const notesOldestFirst = () => [...state.notes].sort((a, b) => a.createdAt.local
 export function cancelNote(id) {
   const n = noteById(id);
   n.status = 'batal';
-  n.cancelledBy = state.user;
   n.updatedAt = now();
   save();
 }
